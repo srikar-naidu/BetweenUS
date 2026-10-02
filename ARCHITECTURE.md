@@ -31,11 +31,6 @@ flowchart LR
 
 The frontend is responsible for:
 
-- upload and preview of fragments
-- group membership and permissions
-- browsing moments and stories
-- showing evidence and uncertainty states
-- minimal UX around “you forgot this” discoveries
 
 The frontend should not become a dashboard for every internal model decision. It should feel like a private memory product, not an ML console.
 
@@ -43,25 +38,11 @@ The frontend should not become a dashboard for every internal model decision. It
 
 The backend API owns:
 
-- auth and authorization
-- group membership and visibility rules
-- media upload orchestration
-- processing job dispatch
-- retrieval coordination
-- AI request wrapper logic
-- structured result persistence
-- error and retry handling
 
 ### Background processing worker
 
 The worker handles expensive operations such as:
 
-- media analysis
-- extraction pipelines
-- candidate retrieval
-- moment grouping
-- story pattern checks
-- periodic longer-running discovery jobs
 
 It runs asynchronously so uploads do not block the user experience.
 
@@ -69,21 +50,12 @@ It runs asynchronously so uploads do not block the user experience.
 
 Gemma is the local reasoning layer. It is used for:
 
-- multimodal understanding of supported media
-- extracting observations from fragments
-- identifying people, entities, events, and relationships
-- comparing fragments in a candidate moment
-- reconstructing probable moments
-- generating evidence-backed stories
-- uncertainty estimation and contradiction handling
 
 The current local runtime in this environment is:
 
-- Ollama 0.35.0
-- local endpoint: http://localhost:11434
-- model: gemma4:e2b-it-q4_K_M
-- context window: 131072 tokens
-- vision/audio capability available via model metadata
+
+The first provider boundary is implemented in `gemma_provider.py`. It uses Ollama's non-streaming `/api/chat` endpoint, JSON Schema output mode, optional base64 image inputs, and environment-based endpoint/model configuration. Higher-level operations such as fragment analysis and moment reconstruction should build on this provider rather than call Ollama directly.
+
 
 ### Backboard
 

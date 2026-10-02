@@ -62,13 +62,10 @@ This means the initial implementation should build an adapter around the Ollama 
 
 The first implementation should be designed around the following structure:
 
-- Frontend application for group memory browsing
-- Backend API for upload, retrieval, and orchestrated AI processing
-- Background worker for incremental fragment analysis and moment reconstruction
-- MongoDB Atlas as the canonical state store
-- Tiger Data for time-aware candidate retrieval
-- Backboard for persistent high-level memory
-- Gemma provider that abstracts local runtime details
+The initial provider is implemented in `gemma_provider.py`. It sends compact context packets to Ollama's non-streaming `/api/chat` endpoint, requests JSON Schema-constrained output, and can pass image bytes for multimodal analysis. It uses only the Python standard library.
+
+Configuration defaults to `http://localhost:11434` and `gemma4:e2b-it-q4_K_M`. Override them with `OLLAMA_HOST` and `GEMMA_MODEL` respectively. The adapter does not store credentials or send requests to a cloud model.
+
 
 ## Documentation set
 
