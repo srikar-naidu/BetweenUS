@@ -1,0 +1,171 @@
+# Architecture design
+
+## Overview
+
+Between Us uses a compact, local-first architecture built around retrieval, candidate ranking, and a small number of focused AI calls.
+
+The critical design choice is that Gemma does not consume the full database. Instead, the system assembles a task-specific Context Packet from a narrow, relevant fragment set and sends that to the model.
+
+## High-level system diagram
+
+```mermaid
+flowchart LR
+    U[User / Group Member] --> FE[Frontend]
+    FE --> API[Backend API]
+    API --> DB[(MongoDB Atlas)]
+    API --> RETR[Tiger Data\nTemporal + Vector Retrieval]
+    API --> WORKER[Background Processing Worker]
+    WORKER --> INGEST[Fragment Ingest + Metadata]
+    INGEST --> CAND[Candidate Retrieval]
+    CAND --> PACK[Context Packet Builder]
+    PACK --> GEMMA[Gemma via Ollama]
+    GEMMA --> OUT[Structured Result]
+    OUT --> DB
+    OUT --> MEM[Backboard Memory]
+    MEM --> RETR
+```
+
+## Components
+
+### Frontend
+
+The frontend is responsible for:
+
+- upload and preview of fragments
+- group membership and permissions
+- browsing moments and stories
+- showing evidence and uncertainty states
+- minimal UX around “you forgot this” discoveries
+
+The frontend should not become a dashboard for every internal model decision. It should feel like a private memory product, not an ML console.
+
+### Backend API
+
+The backend API owns:
+
+- auth and authorization
+- group membership and visibility rules
+- media upload orchestration
+- processing job dispatch
+- retrieval coordination
+- AI request wrapper logic
+- structured result persistence
+- error and retry handling
+
+### Background processing worker
+
+The worker handles expensive operations such as:
+
+- media analysis
+- extraction pipelines
+- candidate retrieval
+- moment grouping
+- story pattern checks
+- periodic longer-running discovery jobs
+
+It runs asynchronously so uploads do not block the user experience.
+
+### Gemma
+
+Gemma is the local reasoning layer. It is used for:
+
+- multimodal understanding of supported media
+- extracting observations from fragments
+- identifying people, entities, events, and relationships
+- comparing fragments in a candidate moment
+- reconstructing probable moments
+- generating evidence-backed stories
+- uncertainty estimation and contradiction handling
+
+The current local runtime in this environment is:
+
+- Ollama 0.35.0
+- local endpoint: http://localhost:11434
+- model: gemma4:e2b-it-q4_K_M
+- context window: 131072 tokens
+- vision/audio capability available via model metadata
+
+### Backboard
+
+Backboard stores persistent AI memory for the group. It should contain high-level, durable information such as:
+
+- people and relationships
+- recurring references
+- inside jokes
+- group-specific terminology
+- known aliases
+- remembered corrections
+- higher-level memory context relevant to future reconstruction
+
+Backboard complements MongoDB and does not replace canonical application state.
+
+### MongoDB Atlas
+
+MongoDB Atlas is the canonical application database. It stores the source-of-truth objects for the application, including:
+
+- users
+- groups
+- group membership
+- fragments
+- moments
+- stories
+- entities
+- permissions
+- processing jobs
+- AI observations
+
+It should be the source of truth for operational state. The AI does not own application state directly.
+
+### Tiger Data
+
+Tiger Data is responsible for temporal and vector retrieval. This is essential for a project where the meaning of memory depends on when events happened.
+
+It should support:
+
+- time-window retrieval around a fragment
+- semantically similar fragment lookup
+- hybrid ranking across temporal and semantic factors
+- efficient search for candidate moments and related stories
+
+### Render
+
+Render hosts the deployment. The initial deployment should be simple and focused:
+
+- frontend
+- backend API
+- background worker
+
+Only add more services if the architecture truly requires them.
+
+### Tinker
+
+Tinker is not part of the initial MVP. It is reserved for later specialization only when there is a clear, measured model weakness that can be improved with targeted training.
+
+## Data ownership
+
+The system should separate responsibilities clearly:
+
+- MongoDB: application truth and operational records
+- Tiger Data: retrieval index and time-aware search layer
+- Backboard: persistent memory and contextual recall
+- Gemma: reasoning over selected candidate context
+- Render: deployment/runtime operations
+
+## Failure boundaries
+
+The architecture should isolate failures by layer:
+
+- upload failure: isolated to storage and processing job creation
+- retrieval failure: degrade gracefully to simpler candidate search
+- AI model failure: return structured uncertainty or retry with narrower context
+- persistence failure: do not allow a stale AI result to be treated as fact
+- permission failure: deny access at API boundaries without leaking metadata
+
+## Design principles
+
+- Do not send the whole database to Gemma
+- Retrieve candidates before reasoning
+- Prefer structured outputs over free-form narrative
+- Keep evidence attached to every generated conclusion
+- Use local Gemma as the default path
+- Treat uncertainty as a first-class part of the product
