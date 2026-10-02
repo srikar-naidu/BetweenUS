@@ -13,7 +13,7 @@ flowchart LR
     U[User / Group Member] --> FE[Frontend]
     FE --> API[Backend API]
     API --> DB[(MongoDB Atlas)]
-    API --> RETR[Tiger Data\nTemporal + Vector Retrieval]
+    API --> RETR[Tiger Data\nTemporal + Lexical Retrieval]
     API --> WORKER[Background Processing Worker]
     WORKER --> INGEST[Fragment Ingest + Metadata]
     INGEST --> CAND[Candidate Retrieval]
@@ -54,7 +54,7 @@ Gemma is the local reasoning layer. It is used for:
 The current local runtime in this environment is:
 
 
-The first provider boundary is implemented in `gemma_provider.py`. It uses Ollama's non-streaming `/api/chat` endpoint, JSON Schema output mode, optional base64 image inputs, and environment-based endpoint/model configuration. Higher-level operations such as fragment analysis and moment reconstruction should build on this provider rather than call Ollama directly.
+The first provider boundary is implemented in `src/lib/ai/gemma-provider.ts` in the Next.js/Node runtime. It uses Ollama's non-streaming `/api/chat` endpoint, JSON Schema output mode, optional base64 image inputs, and environment-based endpoint/model configuration. Higher-level operations such as fragment analysis and moment reconstruction should build on this provider rather than call Ollama directly.
 
 
 ### Backboard
@@ -90,13 +90,13 @@ It should be the source of truth for operational state. The AI does not own appl
 
 ### Tiger Data
 
-Tiger Data is responsible for temporal and vector retrieval. This is essential for a project where the meaning of memory depends on when events happened.
+Tiger Data is responsible for the derived retrieval index. The initial implementation supports temporal filtering and lexical matching; vector retrieval is deferred until an embedding model is selected and evaluated.
 
 It should support:
 
 - time-window retrieval around a fragment
-- semantically similar fragment lookup
-- hybrid ranking across temporal and semantic factors
+- lexical matching against extracted semantic summaries
+- temporal ranking within a group-scoped candidate set
 - efficient search for candidate moments and related stories
 
 ### Render

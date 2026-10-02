@@ -271,3 +271,9 @@ Responsibilities:
 ## Design note
 
 The schema should remain intentionally narrow. It should support essential memory reconstruction and privacy without baking in unnecessary social features before the product has proven its core value.
+
+## Runtime mapping
+
+The Node.js implementation uses TypeScript camelCase fields and stores the domain `id` as MongoDB `_id`. MongoDB remains canonical for fragments and moments. Tiger Data stores only a derived retrieval projection for group-visible fragments: group ID, fragment ID, capture time, semantic summary, and entity keys. It does not own the raw fragment, permissions, or moment records.
+
+The initial Tiger retrieval path filters by group and time, optionally applies lexical matching, and orders candidates by distance from the window midpoint. Vector search is intentionally not implemented until an embedding model and dimensionality are selected. Private and restricted fragments must not be written to the group retrieval index.

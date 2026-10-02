@@ -56,7 +56,7 @@ This matches the product thesis and makes the system meaningfully different from
 
 ### Context
 
-The system needs both operational state storage and temporal/vector retrieval.
+The system needs both canonical application state and time-aware retrieval. No embedding model has been selected yet.
 
 ### Options considered
 
@@ -66,7 +66,7 @@ The system needs both operational state storage and temporal/vector retrieval.
 
 ### Chosen approach
 
-MongoDB Atlas for canonical application state; Tiger Data for time-aware vector and temporal retrieval.
+MongoDB Atlas for canonical application state; Tiger Data for time-aware retrieval. Start with temporal filtering and lexical matching; defer vector indexing until an embedding model and dimensions are chosen.
 
 ### Reason
 
@@ -74,8 +74,8 @@ This keeps operational state and retrieval concerns separated while respecting t
 
 ### Trade-offs
 
-- Pros: clear separation of concerns, strong retrieval fit, simpler mental model
-- Cons: more operational complexity than a single database
+- Pros: clear separation of concerns and a first-class temporal retrieval path
+- Cons: extra operational complexity; vector retrieval remains pending an embedding decision
 
 ## Decision 4: Build context packets rather than sending broad historical context to Gemma
 
@@ -151,3 +151,52 @@ The product’s first value is proving that events can be reconstructed from fra
 
 - Pros: faster MVP, clearer focus, lower complexity
 - Cons: more deliberate future work is needed for advanced features
+
+## Decision 7: Use Next.js, TypeScript, and Node.js for the application runtime
+
+### Context
+
+The first Gemma adapter was prototyped in Python, but the user selected a JavaScript ecosystem for the application and prefers Next.js.
+
+### Options considered
+
+- Keep a separate Python AI service
+- Use Next.js with TypeScript for the app and provider adapter
+
+### Chosen approach
+
+Use Next.js App Router and TypeScript on Node.js for application and server-side AI provider code.
+
+### Reason
+
+This keeps the first application services in one runtime and matches the user's preferred stack. TypeScript supports the typed data contracts already defined in the planning documents.
+
+### Trade-offs
+
+- Pros: one application runtime, typed interfaces, direct use of Node database drivers
+- Cons: future model workflows must fit Node libraries or introduce a separately justified worker runtime
+
+## Decision 8: Keep MongoDB canonical and Tiger Data as a derived retrieval index
+
+### Context
+
+The application needs canonical fragment/moment writes and efficient time-window candidate retrieval, while no embedding model has been selected yet.
+
+### Options considered
+
+- Store all fragment state in both databases
+- Store canonical records in MongoDB and a minimal search projection in Tiger Data
+- Delay Tiger Data until semantic embeddings are ready
+
+### Chosen approach
+
+Store fragments and moments in MongoDB. Store only group-visible candidate metadata in Tiger Data and support temporal plus lexical retrieval first.
+
+### Reason
+
+This preserves a single source of truth while enabling retrieval before model-specific vector decisions are made.
+
+### Trade-offs
+
+- Pros: minimal duplication, useful time-aware retrieval now, no invented embedding dimensions
+- Cons: index synchronization and eventual consistency must be handled by the future processing worker

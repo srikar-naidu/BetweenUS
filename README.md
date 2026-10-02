@@ -39,7 +39,7 @@ The architecture is intentionally small and local-first:
 
 - Local AI layer: Gemma via Ollama
 - Application DB: MongoDB Atlas
-- Retrieval layer: Tiger Data for temporal and vector search
+- Retrieval layer: Tiger Data for temporal and lexical candidate search; vectors are deferred until an embedding model is selected
 - Persistent memory: Backboard
 - Deployment: Render
 - Future specialization: Tinker only if a clear training problem emerges
@@ -56,20 +56,22 @@ This workspace has a verified local runtime:
 - Context length: 131072 tokens
 - Embedding length: 1536
 
-This means the initial implementation should build an adapter around the Ollama HTTP API rather than assuming a different local runtime.
+The runtime adapter targets Ollama's HTTP API; it does not assume a different local runtime.
 
 ## Setup overview
 
-The first implementation should be designed around the following structure:
+The application foundation uses Next.js App Router and TypeScript on Node.js. MongoDB Atlas owns canonical fragment and moment records. Tiger Data stores a derived, group-visible retrieval projection.
 
-The initial provider is implemented in `gemma_provider.py`. It sends compact context packets to Ollama's non-streaming `/api/chat` endpoint, requests JSON Schema-constrained output, and can pass image bytes for multimodal analysis. It uses only the Python standard library.
+The provider in `src/lib/ai/gemma-provider.ts` sends compact context packets to Ollama's non-streaming `/api/chat` endpoint, requests JSON Schema-constrained output, and can pass image bytes for multimodal analysis. Configuration defaults to `http://localhost:11434` and `gemma4:e2b-it-q4_K_M`; override these with `OLLAMA_HOST` and `GEMMA_MODEL`.
 
-Configuration defaults to `http://localhost:11434` and `gemma4:e2b-it-q4_K_M`. Override them with `OLLAMA_HOST` and `GEMMA_MODEL` respectively. The adapter does not store credentials or send requests to a cloud model.
+Set `MONGODB_URI` and `TIGER_DATABASE_URL` for database access. See `.env.example` for the expected variables. Apply `migrations/tiger/001_fragment_search.sql` to the selected Tiger database before retrieval is used.
+
+Run locally with `npm install`, then `npm run dev`. `npm test`, `npm run typecheck`, and `npm run build` provide the current verification gates.
 
 
 ## Documentation set
 
-This repository contains the first-stage planning documents needed before implementation:
+The product and architecture planning documents are:
 
 - PRODUCT.md
 - ARCHITECTURE.md
