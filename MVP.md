@@ -76,6 +76,10 @@ A small group uploads 8 to 12 fragments from a single event and a few unrelated 
 
 The system should identify the likely shared moment, produce a summary, show evidence, and avoid inventing details.
 
+## Current demo implementation
+
+The local demo implements a synthetic group with four fragments, temporal/lexical candidate retrieval, a structured Ollama/Gemma call, evidence-ID validation, and candidate moment persistence. It demonstrates the pipeline shape only; it is not yet a real authenticated multi-user upload flow and does not replace evaluation on a labeled dataset.
+
 ## Hard requirement
 
 The product must feel like memory reconstruction rather than data dumping. The user should not read a raw AI dump; they should see a concise, credible inference with a clear connection to the underlying evidence.

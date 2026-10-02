@@ -52,6 +52,15 @@ export class MongoMemoryRepository {
     return asFragment(fragment);
   }
 
+  async upsertFragment(fragment: Fragment): Promise<void> {
+    const { id, ...document } = fragment;
+    await this.fragments.updateOne(
+      { _id: id },
+      { $set: document, $setOnInsert: { _id: id } },
+      { upsert: true },
+    );
+  }
+
   async findGroupVisibleFragments(
     groupId: string,
     startAt: Date,
@@ -90,6 +99,17 @@ export class MongoMemoryRepository {
     };
     await this.moments.insertOne(moment);
     return asMoment(moment);
+  }
+
+  async upsertMoment(moment: Moment): Promise<Moment> {
+    const { id, ...document } = moment;
+    await this.moments.updateOne(
+      { _id: id },
+      { $set: document, $setOnInsert: { _id: id } },
+      { upsert: true },
+    );
+    const stored: MomentDocument = { _id: id, ...document };
+    return asMoment(stored);
   }
 
   async findMoment(groupId: string, momentId: string): Promise<Moment | null> {

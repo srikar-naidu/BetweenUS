@@ -219,3 +219,9 @@ The system should avoid expensive full-history analysis for every upload.
 - recurring story surfaces
 
 This keeps the system efficient and allows the AI work to scale with real use.
+
+## Current runnable demo slice
+
+The Next.js demo route seeds one synthetic group with four group-visible fragments across photo, screenshot, video, and text types. It filters a 40-minute window around an anchor fragment, ranks candidates using the time window and a lexical term, sends only those candidates to local Gemma, validates that returned evidence IDs came from the candidate set, requires evidence from at least two fragments and two authors, and stores a candidate moment.
+
+The display label is derived from evidence count and distinct authors; the numeric confidence remains the model/system confidence estimate and is not factual probability. Without database environment variables, the route uses an in-memory demo store. When both `MONGODB_URI` and `TIGER_DATABASE_URL` are set, it writes canonical records to MongoDB and retrieves candidates through Tiger Data. Apply `migrations/tiger/001_fragment_search.sql` first. The demo route is development-only unless explicitly enabled with `ENABLE_DEMO_PIPELINE=true`.

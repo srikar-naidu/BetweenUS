@@ -25,10 +25,14 @@ function defaultConfig(): GemmaConfig {
   if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
     baseUrl = `http://${baseUrl}`;
   }
+  const configuredTimeout = Number(process.env.GEMMA_TIMEOUT_MS ?? 300_000);
   return {
     baseUrl: baseUrl.replace(/\/$/, ""),
     model: process.env.GEMMA_MODEL ?? "gemma4:e2b-it-q4_K_M",
-    timeoutMs: 120_000,
+    timeoutMs:
+      Number.isFinite(configuredTimeout) && configuredTimeout > 0
+        ? configuredTimeout
+        : 300_000,
   };
 }
 
