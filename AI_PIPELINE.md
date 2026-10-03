@@ -220,6 +220,12 @@ The system should avoid expensive full-history analysis for every upload.
 
 This keeps the system efficient and allows the AI work to scale with real use.
 
+## MVP Evidence And Uncertainty Gate
+
+The current demo requires every evidence ID to belong to the retrieved group-visible candidate set. It validates temporal claims against captured timestamps, shared-location claims against explicit location keys, and entity/semantic overlap against candidate metadata and summaries. It rejects shared-people claims because the demo has no participant-recognition evidence; uploader identity is not evidence that the uploader or another person appears in the fragment.
+
+The server derives `unknown`, `possible`, or `likely` using the fixed thresholds in `AI_CONTRACTS.md`. It never lets Gemma mark a moment confirmed. Insufficient evidence returns an `unknown` result without persistence; unsupported evidence rejects the response. Confidence is displayed as a model/system signal and does not determine the label.
+
 ## Current runnable demo slice
 
 The Next.js demo route seeds one synthetic group with four group-visible fragments across photo, screenshot, video, and text types. It filters a 40-minute window around an anchor fragment, ranks candidates using the time window and a lexical term, sends only those candidates to local Gemma, validates that returned evidence IDs came from the candidate set, requires evidence from at least two fragments and two authors, and stores a candidate moment.

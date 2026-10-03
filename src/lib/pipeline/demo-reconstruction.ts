@@ -15,6 +15,7 @@ import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
 export interface DemoFragment extends Fragment {
   semanticSummary: string;
   entityKeys: string[];
+  locationKeys: string[];
 }
 
 export interface DemoCandidate extends DemoFragment {
@@ -22,11 +23,23 @@ export interface DemoCandidate extends DemoFragment {
 }
 
 export interface DemoPipelineResult {
+  outcome: "candidate";
   group: { id: string; name: string };
   anchorFragmentId: string;
   candidateFragments: DemoFragment[];
   moment: Moment;
 }
+
+export interface InsufficientEvidenceResult {
+  outcome: "insufficient_evidence";
+  group: { id: string; name: string };
+  anchorFragmentId: string;
+  candidateFragments: DemoFragment[];
+  uncertaintyLabel: "unknown";
+  uncertaintyReason: string;
+}
+
+export type DemoReconstructionResult = DemoPipelineResult | InsufficientEvidenceResult;
 
 export interface DemoPipelineAdapters {
   findCandidates(query: TemporalFragmentQuery): Promise<DemoCandidate[]>;
@@ -63,6 +76,7 @@ const sampleFragments: DemoFragment[] = [
     caption: "A table of fries and three cold coffees at the cafeteria.",
     semanticSummary: "Cafeteria table with fries, three coffees, and friends gathering.",
     entityKeys: ["cafeteria", "fries", "coffee"],
+    locationKeys: ["cafeteria"],
     capturedAt: new Date("2026-09-04T12:04:00Z"),
     createdAt: new Date("2026-09-04T12:04:00Z"),
     metadata: { mimeType: "image/jpeg" },
@@ -78,6 +92,7 @@ const sampleFragments: DemoFragment[] = [
     caption: "Group chat screenshot: 'cafeteria line is moving again, hurry'.",
     semanticSummary: "A message asks friends to hurry to the cafeteria while the line moves.",
     entityKeys: ["cafeteria", "group chat"],
+    locationKeys: ["cafeteria"],
     capturedAt: new Date("2026-09-04T12:09:00Z"),
     createdAt: new Date("2026-09-04T12:09:00Z"),
     metadata: { mimeType: "image/png" },
@@ -93,6 +108,7 @@ const sampleFragments: DemoFragment[] = [
     caption: "Short video: everyone cheers as the cafeteria doors open.",
     semanticSummary: "Friends cheer together at the cafeteria doors shortly after lunch.",
     entityKeys: ["cafeteria", "friends", "doors"],
+    locationKeys: ["cafeteria"],
     capturedAt: new Date("2026-09-04T12:16:00Z"),
     createdAt: new Date("2026-09-04T12:16:00Z"),
     metadata: { mimeType: "video/mp4", durationSeconds: 4 },
@@ -108,6 +124,7 @@ const sampleFragments: DemoFragment[] = [
     caption: "Quiet study room, finally found a seat by the window.",
     semanticSummary: "A quiet study room in the library, away from the cafeteria.",
     entityKeys: ["library", "study room"],
+    locationKeys: ["library"],
     capturedAt: new Date("2026-09-04T14:32:00Z"),
     createdAt: new Date("2026-09-04T14:32:00Z"),
     metadata: {},
@@ -290,22 +307,85 @@ function validateModelResult(
   });
 
   const uniqueEvidence = [...new Map(evidence.map((item) => [item.fragmentId, item])).values()];
-  const authors = new Set(
-    candidates
-      .filter((candidate) => uniqueEvidence.some((item) => item.fragmentId === candidate.id))
-      .map((candidate) => candidate.authorUserId),
-  );
-  if (uniqueEvidence.length < 2 || authors.size < 2) {
-    throw new Error("Not enough independent evidence to create a shared moment candidate");
+  if (uniqueEvidence.length >= 2) {
+    for (const item of uniqueEvidence) {
+      const fragment = candidates.find((candidate) => candidate.id === item.fragmentId);
+      if (!fragment || !relationshipIsSupported(item, fragment, uniqueEvidence, candidates)) {
+        throw new Error(
+          `Gemma assigned unsupported ${item.relationship} evidence to ${item.fragmentId}`,
+        );
+      }
+    }
   }
 
   return { summary: result.summary.trim(), confidence: result.confidence, evidence: uniqueEvidence };
 }
 
+function relationshipIsSupported(
+  evidence: MomentEvidence,
+  fragment: DemoCandidate,
+  selectedEvidence: MomentEvidence[],
+  candidates: DemoCandidate[],
+): boolean {
+  const peers = candidates.filter(
+    (candidate) =>
+      candidate.id !== fragment.id &&
+      selectedEvidence.some((item) => item.fragmentId === candidate.id),
+  );
+  if (evidence.relationship === "shared_people") return false;
+  if (evidence.relationship === "temporal") {
+    return peers.some(
+      (peer) => Math.abs(peer.capturedAt.getTime() - fragment.capturedAt.getTime()) <= 20 * 60_000,
+    );
+  }
+  if (evidence.relationship === "shared_location") {
+    return peers.some((peer) =>
+      fragment.locationKeys.some((key) => peer.locationKeys.includes(key)),
+    );
+  }
+  if (evidence.relationship === "entity_overlap") {
+    return peers.some((peer) =>
+      fragment.entityKeys.some((key) => peer.entityKeys.includes(key)),
+    );
+  }
+
+  const stopWords = new Set(["about", "after", "from", "into", "that", "the", "this", "with"]);
+  const tokens = (value: string) =>
+    new Set(
+      value
+        .toLowerCase()
+        .split(/\W+/)
+        .filter((token) => token.length >= 4 && !stopWords.has(token)),
+    );
+  const fragmentTokens = tokens(fragment.semanticSummary);
+  return peers.some((peer) => {
+    const peerTokens = tokens(peer.semanticSummary);
+    let overlap = 0;
+    for (const token of fragmentTokens) {
+      if (peerTokens.has(token)) overlap += 1;
+    }
+    return overlap >= 2;
+  });
+}
+
+function insufficientEvidence(
+  candidates: DemoCandidate[],
+  reason: string,
+): InsufficientEvidenceResult {
+  return {
+    outcome: "insufficient_evidence",
+    group,
+    anchorFragmentId: sampleFragments[1].id,
+    candidateFragments: candidates,
+    uncertaintyLabel: "unknown",
+    uncertaintyReason: reason,
+  };
+}
+
 export async function runDemoReconstruction(options: {
   adapters?: DemoPipelineAdapters;
   reconstructor?: Reconstructor;
-} = {}): Promise<DemoPipelineResult> {
+} = {}): Promise<DemoReconstructionResult> {
   const adapters = options.adapters ?? (await getAdapters());
   const reconstructor = options.reconstructor ?? new OllamaGemmaProvider();
   const anchor = sampleFragments[1];
@@ -324,7 +404,16 @@ export async function runDemoReconstruction(options: {
     ...candidates,
   ].sort((left, right) => left.capturedAt.getTime() - right.capturedAt.getTime());
   if (allCandidates.length < 2) {
-    throw new Error("Not enough nearby group-visible fragments to reconstruct a moment");
+    return insufficientEvidence(
+      allCandidates,
+      "Only one group-visible fragment falls in this time window, so there is not enough evidence to connect a moment.",
+    );
+  }
+  if (new Set(allCandidates.map((fragment) => fragment.authorUserId)).size < 2) {
+    return insufficientEvidence(
+      allCandidates,
+      "These fragments come from only one member, so we cannot establish a shared group moment yet.",
+    );
   }
 
   const generated = await reconstructor.generateStructured({
@@ -353,17 +442,38 @@ export async function runDemoReconstruction(options: {
   const sourceFragments = allCandidates.filter((candidate) =>
     validated.evidence.some((evidence) => evidence.fragmentId === candidate.id),
   );
+  const evidenceAuthors = new Set(sourceFragments.map((fragment) => fragment.authorUserId));
+  if (sourceFragments.length < 2 || evidenceAuthors.size < 2) {
+    return insufficientEvidence(
+      allCandidates,
+      "The model did not cite enough independent fragments from different members to support a shared moment.",
+    );
+  }
+  const spanMilliseconds =
+    Math.max(...sourceFragments.map((fragment) => fragment.capturedAt.getTime())) -
+    Math.min(...sourceFragments.map((fragment) => fragment.capturedAt.getTime()));
+  const hasCorroboratingRelationship = validated.evidence.some(
+    (item) => item.relationship !== "temporal",
+  );
+  const uncertaintyLabel =
+    sourceFragments.length >= 3 &&
+    evidenceAuthors.size >= 2 &&
+    hasCorroboratingRelationship &&
+    spanMilliseconds <= 20 * 60_000
+      ? "likely"
+      : "possible";
+  const uncertaintyReason =
+    uncertaintyLabel === "likely"
+      ? "Three or more fragments from multiple members share a corroborating detail within 20 minutes. This remains a candidate until a group member confirms it."
+      : "Multiple members contributed nearby fragments, but the evidence does not meet the stronger corroboration rule. This is only a possibility, not a confirmed moment.";
   const moment: Moment = {
     id: "demo-moment-cafeteria-2026-09-04",
     groupId: group.id,
     title: "The cafeteria rush",
     summary: validated.summary,
     confidence: validated.confidence,
-    uncertaintyLabel:
-      sourceFragments.length >= 3 &&
-      new Set(sourceFragments.map((fragment) => fragment.authorUserId)).size >= 2
-        ? "likely"
-        : "possible",
+    uncertaintyLabel,
+    uncertaintyReason,
     startAt: new Date(Math.min(...sourceFragments.map((fragment) => fragment.capturedAt.getTime()))),
     endAt: new Date(Math.max(...sourceFragments.map((fragment) => fragment.capturedAt.getTime()))),
     status: "candidate",
@@ -374,6 +484,7 @@ export async function runDemoReconstruction(options: {
   const storedMoment = await adapters.saveMoment(moment);
 
   return {
+    outcome: "candidate",
     group,
     anchorFragmentId: anchor.id,
     candidateFragments: allCandidates,

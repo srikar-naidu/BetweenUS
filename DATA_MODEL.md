@@ -116,6 +116,7 @@ Responsibilities:
   "summary": "string",
   "confidence": 0.0,
   "uncertainty_label": "confirmed|likely|possible|unknown",
+  "uncertainty_reason": "string",
   "start_time": "datetime",
   "end_time": "datetime",
   "status": "draft|candidate|confirmed|rejected",

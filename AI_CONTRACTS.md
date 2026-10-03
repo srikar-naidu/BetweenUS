@@ -138,3 +138,16 @@ Any AI-generated contract should satisfy:
 ## Responsible usage
 
 These contracts are for internal reasoning and persistence. The user-facing UI can still present a polished narrative, but it should be grounded in the structured evidence behind the contract.
+
+## Current moment-reconstruction gate
+
+The MVP asks Gemma for a summary, a normalized confidence signal, and evidence fragment IDs with relationship types. Before persistence, the server verifies that every ID is in the retrieved group-visible candidate set and that each relationship is supported by the available evidence. The demo has no participant-recognition data, so `shared_people` is rejected; distinct upload authors alone do not prove who was present.
+
+Moment uncertainty is derived by the server, not accepted from Gemma:
+
+- `unknown`: fewer than two distinct cited fragments or fewer than two distinct authors. Do not persist a moment.
+- `possible`: at least two distinct cited fragments from at least two authors, but the stronger rule below is not met.
+- `likely`: at least three cited fragments from at least two authors, a validated corroborating relationship beyond time alone, and no more than 20 minutes between the earliest and latest evidence.
+- `confirmed`: never emitted by the model or this pipeline. Reserve it for an explicit human confirmation flow.
+
+The numeric confidence remains a model/system signal, not a factual probability, and cannot upgrade the deterministic uncertainty label. Invalid IDs or unsupported relationship claims reject the candidate rather than being silently rewritten.

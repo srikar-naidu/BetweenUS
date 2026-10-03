@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import type { Fragment, Moment, MomentEvidence } from "@/lib/domain/memory";
-import type { DemoFragment, DemoPipelineResult } from "@/lib/pipeline/demo-reconstruction";
+import { formatCaptureTime } from "@/lib/domain/format-time";
+import type { DemoFragment, DemoReconstructionResult } from "@/lib/pipeline/demo-reconstruction";
 
 interface Props {
   initialFragments: DemoFragment[];
@@ -29,13 +30,12 @@ const relationshipLabels: Record<MomentEvidence["relationship"], string> = {
   entity_overlap: "Shared details",
 };
 
-function formatTime(value: Date | string): string {
-  return new Date(value).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
-
 export function ReconstructionDemo({ initialFragments, initialMoment }: Props) {
   const [fragments, setFragments] = useState(initialFragments);
   const [moment, setMoment] = useState(initialMoment);
+  const [uncertaintyReason, setUncertaintyReason] = useState(
+    initialMoment?.uncertaintyReason ?? null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -44,12 +44,18 @@ export function ReconstructionDemo({ initialFragments, initialMoment }: Props) {
     startTransition(async () => {
       try {
         const response = await fetch("/api/demo/reconstruct", { method: "POST" });
-        const body = (await response.json()) as DemoPipelineResult | { error: string };
+        const body = (await response.json()) as DemoReconstructionResult | { error: string };
         if (!response.ok || "error" in body) {
           throw new Error("error" in body ? body.error : "Moment reconstruction failed");
         }
         setFragments(body.candidateFragments);
+        if (body.outcome === "insufficient_evidence") {
+          setMoment(null);
+          setUncertaintyReason(body.uncertaintyReason);
+          return;
+        }
         setMoment(body.moment);
+        setUncertaintyReason(body.moment.uncertaintyReason);
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Moment reconstruction failed");
       }
@@ -66,7 +72,7 @@ export function ReconstructionDemo({ initialFragments, initialMoment }: Props) {
         <div className="fragment-list">
           {fragments.map((fragment) => (
             <article className="fragment" key={fragment.id}>
-              <time>{formatTime(fragment.capturedAt)}</time>
+              <time>{formatCaptureTime(fragment.capturedAt)}</time>
               <div>
                 <div className="fragment-meta">
                   <span className="fragment-kind">{fragmentKinds[fragment.type]}</span>
@@ -87,6 +93,7 @@ export function ReconstructionDemo({ initialFragments, initialMoment }: Props) {
           <>
             <h3 className="moment-title">{moment.title ?? "A possible moment"}</h3>
             <p className="moment-summary">{moment.summary}</p>
+            <p className="empty-moment">{uncertaintyReason}</p>
             <p className="evidence-title">Connected evidence</p>
             <ul className="evidence-list">
               {moment.evidence.map((item) => {
@@ -100,12 +107,12 @@ export function ReconstructionDemo({ initialFragments, initialMoment }: Props) {
               })}
             </ul>
             <div className="confidence">
-              <span>System confidence</span>
+              <span>Model confidence, not factual probability</span>
               <span>{Math.round(moment.confidence * 100)}%</span>
             </div>
           </>
         ) : (
-          <p className="empty-moment">The candidate moment will appear here with its source evidence.</p>
+          <p className="empty-moment">{uncertaintyReason ?? "The candidate moment will appear here with its source evidence."}</p>
         )}
         <div className="action-row">
           <button className="primary-button" disabled={isPending} onClick={reconstruct}>

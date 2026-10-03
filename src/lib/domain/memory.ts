@@ -57,6 +57,7 @@ export interface Moment {
   summary: string;
   confidence: number;
   uncertaintyLabel: UncertaintyLabel;
+  uncertaintyReason: string;
   startAt: Date;
   endAt: Date;
   status: MomentStatus;
@@ -71,6 +72,7 @@ export interface NewMoment {
   summary: string;
   confidence: number;
   uncertaintyLabel: UncertaintyLabel;
+  uncertaintyReason: string;
   startAt: Date;
   endAt: Date;
   status?: MomentStatus;
