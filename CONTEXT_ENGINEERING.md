@@ -1,201 +1,127 @@
-# Context engineering
+# Context Engineering: Minimum Sufficient Evidence
 
 ## Principle
 
-The central design requirement is:
+Provide the smallest authorized context that can answer one task. Context is not a shortcut around access control: group, author, visibility, AI consent, and deletion checks happen before retrieval and again before persistence.
 
-> Maximum useful context with minimum unnecessary context.
+MongoDB owns structured facts and provenance. Tiger returns a bounded derived candidate set. Backboard contributes a few durable meanings the group explicitly confirmed. Gemma receives none of these stores wholesale.
 
-Gemma should never receive the whole database, all memories, or broad historical context without a task-specific reason.
+## Context profiles
 
-## What Gemma receives
+| Task | Context allowed | Never include |
+|---|---|---|
+| `observe_fragment` | One authorized source Fragment, required media bytes or its text, extraction schema, capture metadata, and consent state | Other group history, unrelated members, Backboard corpus, or a full timeline |
+| `transcribe_voice` | The opted-in audio object, language/options, and source Fragment ID held outside provider payload where possible | Images, group history, prompts about the group's memories, or unrelated audio |
+| `investigate_moment` | A narrow hypothesis, eligible candidate Observations, timestamps, provenance, contradictions, selected graph relations, a few confirmed Backboard meanings, and optional validated scoring features | Private/restricted candidates, unbounded history, direct identifiers not required for reasoning, or unsupported inferred participants |
+| `detect_story` | A bounded set of eligible confirmed/provisional Moments across a specific group/time range, with their evidence summaries and correction history | Other groups, raw media, all member histories, or speculative Backboard content |
+| `narrate_confirmed_memory` | Member-approved Moment/Story text and pronunciation hints explicitly approved for narration | Raw media, source transcripts, unconfirmed hypotheses, full Context Packets, or unrelated group context |
+| `build_correction_example` | Prediction, member action, chosen evidence IDs, structured features, versions, and consent/de-identification state | Raw media, direct identity, API keys, full prompts, or private member text unless separately approved |
 
-Gemma receives a compact Context Packet created specifically for the current task.
+## Context Packet contract
 
-A representative packet contains:
+Packets are task-specific, versioned, size-bounded, and reproducible from canonical records. Each candidate item has a stable opaque ID, group ID, capture time/timezone, source type, visibility/consent snapshot, Observation references, evidence provenance, and retrieval signals. The packet distinguishes:
 
-- task type, such as reconstruct_possible_moment
-- group_id
-- time window
-- group member context
-- candidate fragments
-- relevant memory summaries
-- constraints and uncertainty rules
+- **Observation:** what the media/text directly supports;
+- **Interpretation:** uncertain semantic explanation;
+- **Relationship:** an evidence-backed link to another object;
+- **Hypothesis:** a possible Moment/Story, not a fact;
+- **Contradiction/unknown:** evidence that weakens or does not resolve a claim.
 
-Example:
+Example investigation packet:
 
 ```json
 {
-  "task": "reconstruct_possible_moment",
-  "group_id": "group_123",
+  "schema_version": "moment-investigation-v1",
+  "task": "investigate_moment_hypotheses",
+  "group_ref": "opaque-group-ref",
   "time_window": {
     "start": "2026-09-04T11:50:00Z",
     "end": "2026-09-04T12:30:00Z"
   },
-  "known_group_context": {
-    "members": [
-      { "id": "u1", "display_name": "A" },
-      { "id": "u2", "display_name": "B" }
-    ]
-  },
-  "candidate_fragments": [
+  "hypotheses": [
     {
-      "id": "f123",
-      "timestamp": "2026-09-04T12:04:00Z",
-      "author_id": "u1",
+      "id": "opaque-hypothesis-id",
+      "summary": "A possible cafeteria gathering",
+      "uncertainty": "possible",
+      "evidence_ids": ["fragment-a", "fragment-b"]
+    }
+  ],
+  "candidates": [
+    {
+      "fragment_id": "fragment-a",
+      "captured_at": "2026-09-04T12:04:00Z",
       "type": "image",
-      "caption": "...",
-      "semantic_summary": "...",
-      "similarity_score": 0.91
+      "observations": [
+        { "claim": "cafeteria table with drinks", "kind": "visual_observation", "source": "fragment-a" }
+      ],
+      "retrieval_signals": { "time_distance_seconds": 0, "lexical_match": true }
     }
   ],
-  "relevant_memories": [
-    {
-      "memory": "Recurring cafeteria joke and group travel dynamic",
-      "confidence": 0.87
-    }
+  "group_meanings": [
+    { "meaning": "A member-confirmed alias for the cafeteria", "provenance": "correction-id" }
   ],
+  "scoring": null,
   "constraints": [
-    "Do not infer an event unless supported by evidence.",
-    "Return uncertainty explicitly."
+    "Cite only supplied evidence IDs.",
+    "Do not infer identity from uploader identity or face appearance.",
+    "Return competing explanations and uncertainty when evidence is ambiguous.",
+    "Never mark a Moment confirmed."
   ]
 }
 ```
 
-## What Gemma does not receive
+The example is illustrative. Production packets must not contain the human-readable names shown here unless the task requires an already-authorized display value.
 
-Gemma should not be sent:
+## Retrieval order and budgets
 
-- the full MongoDB database
-- all historical fragments
-- all embeddings
-- all previous chat history
-- all Backboard memory records
-- unrelated group contexts
-- long global event histories unrelated to the current task
+1. Authorize group and requesting member.
+2. Fetch only active Fragments visible to that member or group and eligible for the specific AI purpose.
+3. Apply deterministic time window and candidate-count limits.
+4. Query Tiger for temporal/lexical results; add semantic-vector search only after its model, dimensions, quality, and privacy behavior are verified.
+5. Expand a bounded set of MongoDB relationships (confirmed aliases, Places, Entities, Moments, Story edges) with same-group filters on every read.
+6. Fetch only a few relevant confirmed Backboard meanings for that group.
+7. Deduplicate, rank, and truncate before building the packet.
 
-This is inefficient, expensive, and reduces the chance of coherent reasoning on irrelevant material.
+Use hard candidate and token budgets as configuration, record the budget/version, and measure recall versus false merges before changing them. A budget must never be raised to recover unauthorized/private data. Retrieval outages may fall back to a simpler temporal/lexical path; they may not fall back to cross-group or private history.
 
-## Retrieval strategy
+## Evidence scoring and convergence context
 
-The model should operate after retrieval, not before.
+If TabPFN is verified and enabled, pass a separately versioned feature vector, not media or free-form history. Candidate signals may include time distance, validated semantic similarity, shared confirmed entity/place, explicit participant evidence, event-like text overlap, capture density, existing Moment links, and contradiction indicators. Missing evidence is represented explicitly, not coerced to zero certainty. Persist scorer version/calibration and its estimate alongside provenance. Gemma may investigate the score; neither score nor model output confirms a Moment.
 
-### 1. Temporal filtering
+For convergence, packets include the current hypothesis version, prior evidence IDs, competing hypotheses, changed/new evidence, and member corrections relevant to this exact group. Do not send the entire revision history: summarize it with links to canonical records and include only the changes needed for the current decision.
 
-The system should first use time windows to filter nearby fragments. The time window should be dynamic and based on the type of event being considered.
+## Memory layers
 
-Examples:
+1. **Source memory:** private R2 bytes and Mongo Fragment metadata. Exact source, author, consent, capture timezone, checksum, and deletion state stay linked.
+2. **Observation memory:** structured, uncertain claims in MongoDB tied to one or more source IDs and model versions.
+3. **Episodic memory:** competing Moment hypotheses, evidence relations, confirmations/corrections, and Stories in MongoDB.
+4. **Retrieval memory:** group-visible derived Tiger projections that can be deleted/rebuilt from authorized MongoDB state.
+5. **Semantic group context:** Backboard meanings members confirmed: nicknames, inside jokes, aliases, and recurring references. This is not canonical event state and does not duplicate raw media.
 
-- short-lived incident: around 15 to 30 minutes
-- social outing: around 1 to 3 hours
-- recurring story discovery: longer historical ranges
+## Voice context
 
-### 2. Semantic retrieval
+STT receives only the author-opted-in audio and minimal transcription options. Store transcript and timestamps as a derived Observation linked to the original voice Fragment. Speaker diarization produces anonymous speaker labels unless a member explicitly maps a label; it never performs identity recognition. The author reviews transcript content before group-level use.
 
-The system should find fragments that are semantically related through their extracted metadata, text, or observations.
+TTS is a separate opt-in operation after a Moment/Story is confirmed or specifically approved for narration. Send only the approved short text, not the Context Packet or group memory. Store output as a private derived object with provenance, consent, provider/version, and deletion linkage. Keep disabled until retention, credits, and provider terms pass review.
 
-### 3. Relationship filtering
+## Corrections and learning data
 
-Candidates should be weighted by:
+Corrections remain canonical Mongo records and preserve the original prediction. Evaluation examples should contain only the structured prediction, action, selected evidence/features, uncertainty, and implementation versions. Apply data minimization and de-identification before export. Tinker use additionally requires explicit experiment approval, supported model/runtime verification, account terms, spend cap, held-out evaluation, and deletion plan. Do not treat every correction as training consent.
 
-- shared people
-- shared location
-- shared entity or object
-- known group-specific references
-- known timeline relationships
+## Caching and invalidation
 
-### 4. Ranking
+Cache only versioned derived outputs such as an Observation or retrieval result. Cache keys include source checksum, group scope, visibility/consent state, model/extractor version, schema version, and retrieval configuration. Invalidate when content, access, consent, deletion state, model/schema, or evidence rules change. Never reuse a cached result across groups or after access revocation.
 
-Ranking should combine:
+## Hallucination, privacy, and telemetry controls
 
-- temporal proximity
-- semantic similarity
-- shared participants
-- shared location
-- same event-like objects or references
-- existing moment relationships
+- Distinguish direct observations from inference; cite opaque source IDs for every claim.
+- Do not infer identity, relationships, locations, or events unsupported by evidence.
+- If evidence is weak or conflicting, preserve competing hypotheses or return `unknown`.
+- Verify cited IDs and permissions from MongoDB after model return; do not trust the Packet or model output alone.
+- Temporal history contains opaque IDs and small statuses only, never raw media, transcripts, embeddings, prompts, completions, or Context Packets.
+- Sentry receives scrubbed spans, timings, safe error categories, component/model versions, and opaque job/Moment IDs. Disable bodies, generative-AI content capture, direct user identity, and replay.
+- External services receive only task-specific minimum data after explicit consent/retention/budget gates. No automatic provider fallback.
 
-This should populate a short candidate set that is small enough to fit within the model’s context budget.
+## Current implementation boundary
 
-## Token and latency considerations
-
-The project must aim for a narrow reasoning loop:
-
-- cheap deterministic filtering
-- retrieval-based narrowing
-- small candidate set
-- one focused Gemma call
-
-This is preferred over sending broad histories or all uploaded media to the model.
-
-The design should minimize:
-
-- prompt bloat
-- repeated long contexts
-- redundant model calls
-- re-analyzing unchanged media
-
-## Caching strategy
-
-Stable AI outputs should be cached to avoid reprocessing.
-
-Examples:
-
-- fragment semantic summaries
-- extracted entity observations
-- clustering decisions for unchanged candidate sets
-- moment-level summaries for stable states
-
-Cache invalidation should happen when:
-
-- fragment contents change
-- model version changes
-- retrieval configuration changes
-- evidence or interpretation rules change
-
-## Memory strategy
-
-Memory must be layered:
-
-### Level 1 — raw memory
-
-The uploaded fragment itself is application data.
-
-### Level 2 — semantic memory
-
-Extracted observations from a fragment, including likely people, location, activity, and tone.
-
-### Level 3 — episodic / group memory
-
-Higher-level events or recurring stories that are reconstructed from multiple fragments.
-
-Backboard should store only the high-value, durable, member-confirmed group memory layer; it should not duplicate raw media or exhaustive fragment history. Use a separate Backboard assistant per group, since memories are shared across threads under the same assistant. Retrieve only a few relevant memories for each ContextPacket and keep memory writes explicit; do not enable automatic writes for speculative model output.
-
-For voice notes, send only the user-opted-in audio file to ElevenLabs for transcription. Do not include unrelated fragments, group histories, or Backboard context in the transcription request. The resulting transcript remains a derived observation linked to the source audio and must be reviewed before group-level use.
-
-## Hallucination prevention
-
-Gemma must operate under strict anti-hallucination rules:
-
-1. Never invent a person.
-2. Never invent an event.
-3. Never invent a location.
-4. Never invent a relationship.
-5. Never convert an assumption into a fact.
-6. Never infer private information unnecessarily.
-7. Always distinguish observed facts from interpretations.
-8. Cite source fragments internally.
-9. Prefer “unknown” over guessing.
-10. Never create a narrative that contradicts source evidence.
-
-The system should encode these as model constraints in the Context Packet and in structured validation after the result is returned.
-
-## Decision principle
-
-A good Context Packet should answer only one question clearly: “Given this small body of evidence, what is the most defensible conclusion we can make right now?”
-
-## Workflow and telemetry boundaries
-
-Temporal is an execution history, not a context database. Pass opaque fragment/job IDs and small status values through workflows. Activities fetch authorized context from MongoDB/Tiger Data, persist sensitive results in their canonical/derived stores, and return opaque IDs/status only. Do not store raw media, extracted text, transcripts, embeddings, full ContextPackets, or model prompts/completions in workflow history.
-
-Sentry should receive scrubbed error categories, timings, and opaque job IDs only. Disable request/response bodies and generative-AI input/output capture so observability does not become another memory store.
+The current production code can ingest private media/text, record provenance and processing jobs, and enforces retrieval/evidence/visibility boundaries in the existing demo. The full multimodal Observation schema, Mongo graph expansion, Tiger semantic vectors, Backboard context, TabPFN scoring, Mastra orchestration, correction-trained Tinker loop, and voice narration remain design targets, not active capabilities. Do not expose UI or telemetry claiming otherwise.

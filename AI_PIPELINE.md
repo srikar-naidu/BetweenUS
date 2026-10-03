@@ -1,242 +1,113 @@
-# AI pipeline design
+# AI Pipeline: Evidence, Hypotheses, and Convergence
 
-## Goal
+## Goal and invariants
 
-The AI pipeline should turn a single incoming fragment into a meaningful candidate moment while minimizing cost, latency, and hallucination risk.
+The pipeline turns independent group Fragments into evidence-backed Moment hypotheses and, over time, Stories. It must preserve uncertainty and provenance as evidence changes. It must not convert model confidence into fact or let any model confirm a Moment.
 
-The system should use deterministic filtering and retrieval first, and only then invoke Gemma on a compact Context Packet.
+- Authorize and filter before retrieval or inference.
+- Persist source evidence and versioned Observations before deriving group claims.
+- Every claim points to active, authorized source Fragments in the same group.
+- Treat model and scorer outputs as hypotheses; members alone confirm.
+- Keep media, transcripts, prompts, and Context Packets out of Temporal histories and Sentry events.
+- Prefer local Gemma. Cloud providers are opt-in, minimal, budgeted, and disabled until privacy/retention approval.
 
-## High-level flow
+## Target pipeline
 
 ```text
-UPLOAD
-  ↓
-INGEST
-  ↓
-EXTRACT
-  ↓
-EMBED
-  ↓
-RETRIEVE CANDIDATES
-  ↓
-CLUSTER / COMPARE
-  ↓
-GEMMA REASONING
-  ↓
-MOMENT CANDIDATE
-  ↓
-EVIDENCE VALIDATION
-  ↓
-STORE
-  ↓
-SURFACE TO USER
+Capture -> validate -> private object + Mongo Fragment/ProcessingJob
+  -> Temporal workflow (opaque IDs)
+  -> Gemma Observation (or opt-in voice STT -> Observation)
+  -> Mongo structured graph + authorized Tiger projection
+  -> Tiger temporal/semantic retrieval + Mongo relationship expansion
+  -> minimal Context Packet + a few confirmed Backboard meanings
+  -> optional TabPFN feature score -> Gemma investigation of hypotheses
+  -> deterministic evidence/privacy audit -> Mongo Moment revisions
+  -> member confirm/reject/correct -> evaluation example -> gated Tinker study
 ```
 
-## 1. Ingestion
+This is the intended architecture, not a claim that every integration is currently active. The current app has a local Gemma demo, private-by-default Phase 1 boundaries, Phase 2 upload/job code, and a Temporal worker skeleton. A real R2 bucket and Temporal service still require configuration and a live end-to-end test.
 
-When a fragment arrives, the system should record:
+## 1. Ingestion and provenance
 
-- user and group ownership
-- timestamp
-- media metadata
-- source type
-- visibility rules
-- processing job status
+The authenticated API binds each submission to the current user and requested group. It validates actual file signatures, allowed media type, exact size, MP4 duration, capture timestamp/timezone, caption/text limits, visibility, and consent. It creates a stable idempotency key, private storage object key, Mongo Fragment, upload reservation, and ProcessingJob.
 
-The ingestion layer should avoid doing expensive AI work immediately for every fragment. The system should capture the raw data and then queue incremental analysis.
+MongoDB stores the canonical Fragment fields: author, group, source, capture time and timezone, MIME type, byte size, checksum, visibility, AI consent and timestamps, processing version/status, storage reference, and deletion state. Raw bytes go only to private object storage. Text notes are canonical Mongo content with no media object. New fragments remain private and AI processing stays off unless the member explicitly opts in.
 
-## 2. Multimodal analysis
+The object store and Temporal client are required for media upload. APIs fail closed with a configuration error if either is unavailable; they do not fall back to public storage, Render disk, an in-process queue, or an unmetered provider.
 
-For supported media, the system should extract:
+## 2. Observation: Gemma sees
 
-- visible faces or people references
-- objects and locations
-- scene type
-- text present in the image or screenshot
-- activities or motion cues
-- likely timestamps or metadata context
+For eligible media, a worker fetches the authorized object by opaque Fragment ID and calls local Gemma with only that one Fragment and the extraction schema. Gemma returns a structured Observation containing, when supported:
 
-Not all fragments require full multimodal reasoning. The system should attempt to extract only the fields needed for candidate grouping.
+- visible objects, activity, scene, and text/OCR evidence;
+- location clues and time clues with source offsets/metadata;
+- possible entity references or group aliases, never an asserted real-world identity;
+- direct observations versus inferred interpretations;
+- uncertainty, missing evidence, and model/version provenance.
 
-## 3. Semantic extraction
+For video, inspect only the documented short-video sample/keyframes after Phase 2 limits are validated; do not pass an archive or every frame. Never identify a person by face without separately approved consent/safety design. Malformed output is rejected or retried; it is not persisted as a fact.
 
-Each fragment should generate a structured semantic summary such as:
+For opted-in voice notes, a separate activity may send only the source audio and minimum options to ElevenLabs STT after account terms/retention and spend/consent gates pass. Store transcript, speaker labels, and word timestamps as derived evidence linked to the audio. Speaker labels are local transcript labels, not identity. The author reviews transcript content before group retrieval. Until that gate passes, voice processing remains disabled.
 
-- people: [A, B, C]
-- location: cafeteria
-- activity: eating or waiting
-- objects: table, food, phone
-- tone: playful, tense, chaotic
-- known references: bunker, nickname, recurring joke
+## 3. Structured memory and retrieval
 
-These are AI observations, not unquestionable facts.
+Persist Observation claims and graph edges in MongoDB with source Fragment IDs, group, extractor version, and provenance. Project only active, group-visible, AI-consented fields into Tiger. Remove or invalidate projections when visibility, consent, or deletion changes.
 
-## 4. Embeddings
+Candidate retrieval happens before reasoning and combines:
 
-Embeddings should be generated selectively for retrieval, not blindly for every object.
+- hard group, active-state, visibility, consent, and time-window filters;
+- time distance and capture density;
+- semantic similarity only after an embedding model, dimensions, license, and retrieval-quality test are selected;
+- lexical matching as a current fallback;
+- MongoDB shared entity/place/person-alias and existing Moment/Story relationships;
+- a few relevant, confirmed Backboard meanings (nicknames, inside jokes, recurring references).
 
-Priority candidates for embedding:
+MongoDB remains the graph authority. Tiger is a derived retrieval index, not a store of permissions. Backboard is semantic group context, not a duplicate graph or a place for speculative claims. A failed Backboard read degrades to no semantic context; it never blocks core reconstruction.
 
-- fragment semantic summaries
-- moment summaries
-- story summaries
-- relevant textual observations
+## 4. Context Packet
 
-The exact embedding model should be documented and chosen based on:
+Build a task-specific Packet from the smallest authorized candidate set. Include pseudonymous member keys only when they matter, candidate IDs/timestamps, compact Observations and provenance, known contradictions, relevant confirmed Backboard meanings, and explicit output constraints. Do not include raw unrelated history, private fragments, direct identifiers, or all Backboard memory. See [CONTEXT_ENGINEERING.md](CONTEXT_ENGINEERING.md) for packet budgets and boundaries.
 
-- local availability
-- latency
-- dimensionality
-- compatibility with Tiger Data
-- retrieval quality
+## 5. Evidence scoring and Gemma investigation
 
-If multimodal embeddings are available locally and useful, they can be evaluated. If not, text-derived representations are an acceptable baseline.
+TabPFN is an optional feature scorer, not a language model. Its input may include time distance, semantic similarity, shared confirmed entities/places, explicit participant evidence, text/visual similarity, capture density, and prior relationship evidence. It may estimate `P(same_moment)` only after supported API/runtime, sufficient labeled data, calibration, false-merge review, and a spend/privacy gate are verified. Store model version and feature provenance. The score never confirms a Moment or overrides evidence constraints.
 
-## 5. Retrieval
+Gemma receives the bounded Packet, optional validated score/features, and competing hypotheses. It proposes relationships, summaries, contradiction notes, and uncertainty with citations to candidate IDs. Mastra may later coordinate distinct AI steps (observation, retrieval investigation, evidence audit, Story detection, narration) inside an activity; Temporal remains the durable process/retry/schedule owner. Do not add both as competing workflow engines.
 
-Candidate retrieval should happen before Gemma reasoning.
+## 6. Deterministic evidence and privacy audit
 
-### Temporal retrieval
+Before persistence, deterministic code validates:
 
-Search nearby time ranges around the fragment, such as:
+- every cited Fragment/Observation exists and belongs to the authorized group;
+- every source is active and permitted by visibility and consent at decision time;
+- evidence IDs are in the retrieved Packet, not invented by the model;
+- timestamp and stated relationships are supported by stored data;
+- contradictions and missing evidence remain visible;
+- a private/restricted Fragment cannot become group evidence by inference;
+- `confirmed` can only come from a member action.
 
-- ±10 minutes for short-lived events
-- ±1 hour for longer social gatherings
-- wider period if there is weak evidence or repeated patterns
+If validation fails, reject the unsupported output or return `unknown` without storing a Moment. Do not repair invalid citations by guessing.
 
-### Semantic retrieval
+## 7. Moment hypotheses and convergence
 
-Retrieve fragments that are similar in meaning or content.
+MongoDB stores candidate hypotheses as versioned graph records with group, evidence links, competing interpretations, status, uncertainty label/reason, Observation/retrieval/scorer/model versions, and revision provenance. New authorized evidence triggers an idempotent reevaluation workflow for affected hypotheses; it should update, split, merge, or leave hypotheses unresolved without erasing prior revisions.
 
-### Relationship retrieval
+Temporal may schedule later reevaluations (for example, after new evidence or a bounded delay) and longer-range Story discovery. Schedule intervals, user notifications, retention, and cost must be designed before enabling periodic runs. No timer or score automatically changes a hypothesis to member-confirmed.
 
-Prefer fragments involving:
+## 8. Member correction and Tinker learning loop
 
-- same people
-- same location
-- same entity
-- same shared reference or nickname
-- known group memory context
+Every confirm, reject, split, merge, or correction is stored in MongoDB with actor, timestamp, affected hypothesis, prior/new interpretation, selected evidence, and provenance. Use these outcomes first to evaluate retrieval/reconstruction quality. Build structured, de-identified examples with no raw media or direct identifiers. Tinker is a separate, budget-capped experiment after a baseline and held-out dataset exist; verify its current supported model catalog, task/runtime path, data terms, sampling/checkpoint controls, deletion, and pricing first. Never assume Gemma compatibility or put a Tinker checkpoint on the production path by default.
 
-## 6. Candidate ranking
+## 9. Optional narrated memories
 
-Fragments should be ranked using a mixture of signals:
+ElevenLabs TTS may narrate only a member-approved/confirmed Moment or Story, from a short, validated text representation. It must not receive private source media, the full Context Packet, or an unconfirmed speculative narrative. Require an explicit narration action/consent, disclose external processing, use an approved stock voice (no cloning or voice imitation), budget calls, keep generated audio private, link it to the Moment/version, and support deletion. Keep disabled until retention and account policy are verified.
 
-- temporal proximity
-- semantic similarity
-- shared people
-- shared location
-- shared entities
-- known relationship knowledge
-- existing moment linkage
+## 10. Durable orchestration and observability
 
-The result is a small candidate set. This reduces model cost and improves accuracy.
+Temporal owns ingestion, observation, retrieval/reconstruction, deletion cleanup, and (later) convergence workflows with idempotent activities, explicit timeouts/retries, and stable workflow IDs. MongoDB owns job status and domain state. Workflow arguments/results contain only opaque IDs and small status values. Activities fetch authorized bytes/context at execution time, persist outputs in MongoDB/Tiger/R2, and return opaque references.
 
-## 7. Context assembly
+Mastra is not a durable job store. Sentry should trace workflow steps, Gemma calls, retrieval, optional scoring, provider calls, latency, and failures using scrubbed operation names and opaque IDs. Disable request bodies, media, prompts/completions, transcripts, direct identity, session replay, and sensitive span attributes. A telemetry failure must not affect processing.
 
-The system should build a compact Context Packet that includes only the minimum relevant information required for the current task.
+## Current demo boundary
 
-This packet should include:
-
-- task type
-- group ID
-- time window
-- group members
-- candidate fragments
-- relevant memories
-- constraints and uncertainty rules
-
-The point is to give Gemma a narrowly scoped decision space rather than a database dump.
-
-## 8. Gemma inference
-
-The model should reason over the Context Packet and produce a structured output. The prompt should instruct the model to:
-
-- be evidence-based
-- mention uncertainty explicitly
-- not invent people, places, or relationships
-- cite source fragment IDs internally
-- return only outputs supported by the evidence
-
-## 9. Structured outputs
-
-The AI should prefer structured JSON over free-form text for internal processing. Examples:
-
-- FragmentAnalysis
-- MomentCandidate
-- MomentUpdate
-- StoryCandidate
-- EvidenceLink
-- Uncertainty
-
-This makes validation, persistence, and UI display easier and more reliable.
-
-## 10. Evidence validation
-
-Every AI-generated conclusion should be tied back to source fragments. The system should validate:
-
-- evidence existence
-- fragment ownership
-- group relevance
-- temporal plausibility
-- contradiction handling
-
-If the evidence is thin, the system should prefer “not enough evidence” over a narrative story.
-
-## 11. Persistence
-
-Structured results should be stored in MongoDB and associated with the relevant fragments, moment, or story record.
-
-Persisted outputs may include:
-
-- AI observation summaries
-- confidence score
-- evidence references
-- uncertainty label
-- relationship explanations
-
-## 12. Incremental processing
-
-The system should avoid expensive full-history analysis for every upload.
-
-### Real-time path
-
-- understand new fragment
-- search nearby candidates
-- compare against likely moment contexts
-- update or create a candidate moment
-
-### Periodic path
-
-- re-evaluate related moments over longer windows
-- look for recurring stories or connections
-- refine event clusters
-
-### Long-term path
-
-- retrospective pattern detection
-- forgotten-connections discovery
-- recurring story surfaces
-
-This keeps the system efficient and allows the AI work to scale with real use.
-
-## MVP Evidence And Uncertainty Gate
-
-The current demo requires every evidence ID to belong to the retrieved group-visible candidate set. It validates temporal claims against captured timestamps, shared-location claims against explicit location keys, and entity/semantic overlap against candidate metadata and summaries. It rejects shared-people claims because the demo has no participant-recognition evidence; uploader identity is not evidence that the uploader or another person appears in the fragment.
-
-The server derives `unknown`, `possible`, or `likely` using the fixed thresholds in `AI_CONTRACTS.md`. It never lets Gemma mark a moment confirmed. Insufficient evidence returns an `unknown` result without persistence; unsupported evidence rejects the response. Confidence is displayed as a model/system signal and does not determine the label.
-
-## Planned partner lanes for the final MVP
-
-- Temporal owns the durable `ProcessFragmentWorkflow`; workflow steps pass opaque IDs and small statuses, while activities load authorized media/context from canonical stores, persist sensitive outputs there, and return opaque references. Sentry records scrubbed failures and timings only.
-- Backboard: after a member confirms a correction or alias, write that high-level fact to the group's Backboard assistant and store provider IDs/provenance in MongoDB. Reconstruction may retrieve a few relevant memories read-only. Never auto-write speculative model output.
-- ElevenLabs: only an explicitly opted-in voice note is sent to Scribe from a server-side processing job. The returned transcript is linked to the source audio and reviewed by its author before group use.
-- Tinker: run a separate, budget-capped experiment on a de-identified labeled dataset after the Gemma baseline exists. Tinker is not part of the upload/reconstruction request path by default.
-
-The full phase sequence, data boundaries, credit gates, UI direction, and acceptance criteria are in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
-
-## Current runnable demo slice
-
-The Next.js demo route seeds one synthetic group with four group-visible fragments across photo, screenshot, video, and text types. It filters a 40-minute window around an anchor fragment, ranks candidates using the time window and a lexical term, sends only those candidates to local Gemma, validates that returned evidence IDs came from the candidate set, requires evidence from at least two fragments and two authors, and stores a candidate moment.
-
-The display label is derived from evidence count and distinct authors; the numeric confidence remains the model/system confidence estimate and is not factual probability. Without database environment variables, the route uses an in-memory demo store. When both `MONGODB_URI` and `TIGER_DATABASE_URL` are set, it writes canonical records to MongoDB and retrieves candidates through Tiger Data. Apply `migrations/tiger/001_fragment_search.sql` first. The synthetic route is strictly development-only and returns 404 in staging/production; it has no user-media access.
+The synthetic demo creates a candidate from seeded fragments, applies a bounded time/lexical retrieval, validates cited evidence, requires multiple fragments/authors, and derives uncertainty. It is not the production ingestion workflow and has no user-media access. Phase 2 upload/job code records media and schedules a workflow, but the complete Gemma Observation -> retrieval -> Moment convergence chain remains subsequent work.
