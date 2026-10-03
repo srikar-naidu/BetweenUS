@@ -95,6 +95,19 @@ MongoDB is authoritative. Tiger and Backboard are derived/context services that 
 
 Do this before consuming provider credits or implementing external integrations.
 
+**Current status: NOT COMPLETE.** Repository review found the following decisions already represented: Better Auth + Google OAuth is the identity path; Google callback configuration is documented in `README.md`; new fragments default to private with AI processing consent off; local Gemma is the default; and the current home screen/CSS establish an initial screen and token direction. See `DECISIONS.md` Decision 12 for the additional Phase 0 defaults locked during this review.
+
+The following exit-gate items remain unverified and must be completed by an operator with access to the provider accounts before any external provider is enabled or any real personal media is sent:
+
+- Record remaining credits, expiry, permitted use, rate limits, billing behavior, retention, and training terms for Backboard, Tinker, ElevenLabs, Temporal Cloud, and Sentry.
+- Verify Tinker's live supported-model catalog, Gemma compatibility, sampling/checkpoint options, and account billing; until then, Tinker remains disabled and no samples are sent.
+- Configure and test Google OAuth credentials and the `/api/auth/callback/google` callback; the repository's `.env.example` contains blank credential placeholders and does not prove configuration.
+- Create and verify a private Cloudflare R2 bucket and credentials. No production media may be stored on Render's ephemeral disk.
+- Confirm that no real personal media has already been sent to a third party. The repository cannot establish this historical fact.
+- Before enabling any billable call, implement its feature flag, usage logging, and an explicitly approved non-zero cap; until that approval, the authorized external spend ceiling is $0.
+
+The project can continue on local Gemma and synthetic demo data while these account checks are pending. Phase 1 implementation does not waive this gate for external processing.
+
 - Confirm actual remaining Backboard, Tinker, and ElevenLabs credits, expiry, allowed use, rate limits, and billing behavior from the developer accounts. The plan does not assume credits are unlimited or still active.
 - Verify Temporal Cloud availability/credits and establish a small usage budget; choose Cloud only if account terms and deployment connectivity fit the Render worker.
 - Review Sentry plan limits and retention. Disable capture of media, HTTP bodies, AI inputs/outputs, auth/session data, and direct user identifiers before sending any events.

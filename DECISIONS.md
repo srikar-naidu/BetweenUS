@@ -314,3 +314,33 @@ The project should maximize useful sponsor participation without duplicating orc
 
 - Pros: fewer operational systems and clearer sponsor value
 - Cons: several sponsors remain evaluation/development-only rather than runtime integrations
+
+## Decision 15: Lock Phase 0 operational defaults before provider use
+
+### Context
+
+The implementation plan requires account-specific credit, billing, retention, and compatibility checks before external integrations. Those values cannot be inferred from source code or assumed from partner credits.
+
+### Chosen approach
+
+- Keep Better Auth with Google OAuth as the identity path; require verified email for email-bound invitations and use `/api/auth/callback/google`.
+- Use a private Cloudflare R2 bucket as the production media-storage target, accessed only through a server-side storage adapter. Never use public object URLs or Render's ephemeral disk for production media.
+- Set the authorized external-provider spend ceiling to $0 until account balances/terms are checked and a non-zero per-provider cap is explicitly approved. Every billable integration must have a kill-switch feature flag and usage logging before it can be enabled.
+- Keep Backboard, Tinker, ElevenLabs, Temporal Cloud, and Sentry external calls disabled until their account-specific terms, retention, billing, and privacy configuration are verified. Local Gemma and synthetic demo data remain usable.
+- Keep fragment visibility private and AI-processing consent off by default. General AI consent does not authorize external-provider processing; each such use requires provider-specific, informed consent before implementation.
+- Initial ingestion bounds: JPEG/PNG/WebP images and screenshots up to 15 MiB; MP4 video up to 50 MiB and 60 seconds; text up to 10,000 characters. Validate actual content and media duration server-side, not just the supplied MIME type. Voice uploads and transcription remain disabled until the ElevenLabs gate passes; any later voice feature is separately capped and consented.
+- Use this consent copy for the initial local-AI flow: "Allow AI processing for group moment suggestions. This fragment stays private unless you separately choose Group visibility. Turning this off excludes it from AI processing." External processing must present a separate provider-specific notice and consent before sending data.
+- Treat the existing home screen and CSS tokens as the initial product-design baseline; refine them as implementation proceeds rather than blocking the trust foundation on a second design pass.
+
+### Verification still required
+
+Provider balances, expiry, rate limits, billing behavior, live retention/training terms, Tinker model/checkpoint compatibility, OAuth credentials/callback operation, R2 account and bucket setup, and confirmation that no real personal media has already been sent are operator checks. They are intentionally not claimed as complete by this repository decision. Until verified, the $0 spend ceiling and disabled external-call policy remain in force.
+
+### Reason
+
+This makes the decisions that are safe to make from the project context while preventing unknown credits, retention, and account entitlements from silently becoming approval to send data or incur charges.
+
+### Trade-offs
+
+- Pros: unambiguous privacy and spending defaults; a concrete media-storage target; local development can continue without provider credentials
+- Cons: optional integrations remain unavailable until account checks and explicit caps are recorded
