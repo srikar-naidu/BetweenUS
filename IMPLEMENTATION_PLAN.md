@@ -95,7 +95,9 @@ MongoDB is authoritative. Tiger and Backboard are derived/context services that 
 
 Do this before consuming provider credits or implementing external integrations.
 
-**Current status: NOT COMPLETE.** Repository review found the following decisions already represented: Better Auth + Google OAuth is the identity path; Google callback configuration is documented in `README.md`; new fragments default to private with AI processing consent off; local Gemma is the default; and the current home screen/CSS establish an initial screen and token direction. See `DECISIONS.md` Decision 12 for the additional Phase 0 defaults locked during this review.
+**Current status: LOCAL DECISIONS RECORDED; OPERATOR EXIT GATE OPEN.** Better Auth + Google OAuth is the identity path; the callback is documented in `README.md`; new fragments default to private with AI processing consent off; local Gemma is the default; the initial screens/tokens exist; and local storage, budget, upload, and consent defaults are recorded in `DECISIONS.md` Decision 15. The remaining provider-account facts and historical data-sharing confirmation cannot be established from this repository.
+
+During the latest local check (2026-10-03), required environment variables were present, the Tiger migration applied, and the configured local Gemma model was available. MongoDB returned `ECONNREFUSED`, so Google sign-in and database-backed flows were not verified. No environment values are recorded here.
 
 The following exit-gate items remain unverified and must be completed by an operator with access to the provider accounts before any external provider is enabled or any real personal media is sent:
 
@@ -121,6 +123,10 @@ The project can continue on local Gemma and synthetic demo data while these acco
 **Exit gate:** written decisions for identity, media storage, provider credit caps, data-sharing/retention, and model compatibility. No real personal media has been sent to a third party yet.
 
 ### Phase 1: Trust foundation and real group boundaries
+
+**Current status: IN PROGRESS; EXIT GATE NOT MET.** Better Auth/Google, Mongo-backed sessions, group APIs, membership checks, private-by-default visibility, explicit AI consent, deletion-pending records, moment invalidation, Tiger projection removal, and server-side auth configuration validation are implemented. Unit tests now assert group-scoped fragment/moment Mongo queries and deletion-request provenance.
+
+Remaining work: validate signed-in requests across two real groups at the API boundary and against Mongo/Tiger; test object URL and provider-context isolation when those integrations exist; implement/verify cleanup of stored media and provider memories when their adapters are introduced; and complete a live OAuth/session check after MongoDB connectivity is restored. The present tests are not the Phase 1 two-group integration exit gate.
 
 - Implement Better Auth Google sign-in, MongoDB-backed sessions, group creation/invites, membership roles, and server-side authorization helpers. Use the Google callback `/api/auth/callback/google` and require verified email for email-bound invitations.
 - Add tests proving users cannot enumerate or retrieve another group's fragments, moments, evidence, or Backboard assistant ID.

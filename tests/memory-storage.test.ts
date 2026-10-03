@@ -96,9 +96,63 @@ test("Mongo fragment reads separate member visibility from AI processing consent
   assert.equal(memberFilter?.deletionState, "active");
 });
 
+test("fragment and moment reads always scope Mongo filters to the requested group", async () => {
+  const fragmentFilters: Record<string, unknown>[] = [];
+  const momentFilters: Record<string, unknown>[] = [];
+  const cursor = () => ({
+    sort: () => ({ limit: () => ({ toArray: async () => [] }) }),
+  });
+  const fakeDb = {
+    collection: (name: string) =>
+      name === "fragments"
+        ? {
+            find: (filter: Record<string, unknown>) => {
+              fragmentFilters.push(filter);
+              return cursor();
+            },
+          }
+        : {
+            findOne: async (filter: Record<string, unknown>) => {
+              momentFilters.push(filter);
+              return null;
+            },
+            find: (filter: Record<string, unknown>) => {
+              momentFilters.push(filter);
+              return cursor();
+            },
+          },
+  } as unknown as Db;
+  const repository = new MongoMemoryRepository(fakeDb);
+  const startAt = new Date("2026-09-04T11:50:00Z");
+  const endAt = new Date("2026-09-04T12:30:00Z");
+
+  await repository.findGroupVisibleFragments("group-a", startAt, endAt);
+  await repository.findGroupVisibleFragments("group-b", startAt, endAt);
+  await repository.findMemberVisibleFragments("group-a", "user-a");
+  await repository.findMemberVisibleFragments("group-b", "user-a");
+  await repository.findMoment("group-a", "moment-a");
+  await repository.findMoment("group-b", "moment-a");
+  await repository.listMoments("group-a");
+  await repository.listMoments("group-b");
+
+  assert.deepEqual(fragmentFilters.map((filter) => filter.groupId), [
+    "group-a",
+    "group-b",
+    "group-a",
+    "group-b",
+  ]);
+  assert.deepEqual(momentFilters.map((filter) => filter.groupId), [
+    "group-a",
+    "group-b",
+    "group-a",
+    "group-b",
+  ]);
+});
+
 test("fragment deletion changes state instead of deleting provenance immediately", async () => {
   let capturedUpdate: Record<string, unknown> | undefined;
   let capturedFilter: Record<string, unknown> | undefined;
+  let deletionRequestWrite: { filter: Record<string, unknown>; update: Record<string, unknown> } | undefined;
   const multiUpdates: Array<{ collection: string; filter: Record<string, unknown>; update: Record<string, unknown> }> = [];
   const fakeCollection = {
     updateOne: async (filter: Record<string, unknown>, update: Record<string, unknown>) => {
@@ -118,7 +172,10 @@ test("fragment deletion changes state instead of deleting provenance immediately
             },
           }
         : {
-            updateOne: async () => ({ matchedCount: 0, modifiedCount: 0, upsertedCount: 1 }),
+            updateOne: async (filter: Record<string, unknown>, update: Record<string, unknown>) => {
+              if (name === "deletion_requests") deletionRequestWrite = { filter, update };
+              return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1 };
+            },
             updateMany: async (filter: Record<string, unknown>, update: Record<string, unknown>) => {
               multiUpdates.push({ collection: name, filter, update });
               return { matchedCount: 1, modifiedCount: 1 };
@@ -146,6 +203,12 @@ test("fragment deletion changes state instead of deleting provenance immediately
     { visibility: "group" },
     { authorUserId: "user-a" },
   ]);
+  assert.equal(deletionRequestWrite?.filter.targetType, "fragment");
+  assert.equal(deletionRequestWrite?.filter.targetId, "fragment-a");
+  const deletionRecord = deletionRequestWrite?.update.$setOnInsert as Record<string, unknown>;
+  assert.equal(deletionRecord.groupId, "group-a");
+  assert.equal(deletionRecord.requestedByUserId, "user-a");
+  assert.equal(deletionRecord.status, "pending");
   assert.equal(multiUpdates[0].collection, "moments");
   assert.equal(multiUpdates[0].filter["evidence.fragmentId"], "fragment-a");
   assert.equal((multiUpdates[0].update.$set as Record<string, unknown>).status, "draft");

@@ -23,18 +23,55 @@ export class AuthConfigurationError extends Error {
   }
 }
 
-export function getAuthConfigurationStatus() {
-  const missing = [
-    ["MONGODB_URI", process.env.MONGODB_URI],
-    ["BETTER_AUTH_SECRET", process.env.BETTER_AUTH_SECRET],
-    ["BETTER_AUTH_URL", process.env.BETTER_AUTH_URL],
-    ["GOOGLE_CLIENT_ID", process.env.GOOGLE_CLIENT_ID],
-    ["GOOGLE_CLIENT_SECRET", process.env.GOOGLE_CLIENT_SECRET],
-  ]
-    .filter(([, value]) => !value)
-    .map(([name]) => name);
+type AuthEnvironment = {
+  [key: string]: string | undefined;
+  MONGODB_URI?: string;
+  BETTER_AUTH_SECRET?: string;
+  BETTER_AUTH_URL?: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+};
 
-  return { configured: missing.length === 0, missing };
+export function getAuthConfigurationStatus(environment: AuthEnvironment = process.env) {
+  const missing = [
+    ["MONGODB_URI", environment.MONGODB_URI],
+    ["BETTER_AUTH_SECRET", environment.BETTER_AUTH_SECRET],
+    ["BETTER_AUTH_URL", environment.BETTER_AUTH_URL],
+    ["GOOGLE_CLIENT_ID", environment.GOOGLE_CLIENT_ID],
+    ["GOOGLE_CLIENT_SECRET", environment.GOOGLE_CLIENT_SECRET],
+  ]
+    .filter(([, value]) => !value?.trim())
+    .map(([name]) => name);
+  const invalid: string[] = [];
+  const mongoUri = environment.MONGODB_URI?.trim();
+  const authUrl = environment.BETTER_AUTH_URL?.trim();
+  const authSecret = environment.BETTER_AUTH_SECRET;
+
+  if (mongoUri) {
+    try {
+      const parsed = new URL(mongoUri);
+      if (!["mongodb:", "mongodb+srv:"].includes(parsed.protocol) || !parsed.hostname) {
+        invalid.push("MONGODB_URI");
+      }
+    } catch {
+      invalid.push("MONGODB_URI");
+    }
+  }
+  if (authUrl) {
+    try {
+      const parsed = new URL(authUrl);
+      if (!["http:", "https:"].includes(parsed.protocol) || !parsed.hostname) {
+        invalid.push("BETTER_AUTH_URL");
+      }
+    } catch {
+      invalid.push("BETTER_AUTH_URL");
+    }
+  }
+  if (authSecret && Buffer.byteLength(authSecret, "utf8") < 32) {
+    invalid.push("BETTER_AUTH_SECRET");
+  }
+
+  return { configured: missing.length === 0 && invalid.length === 0, missing, invalid };
 }
 
 export async function getAuth(): Promise<AuthInstance> {
@@ -42,8 +79,9 @@ export async function getAuth(): Promise<AuthInstance> {
 
   const status = getAuthConfigurationStatus();
   if (!status.configured) {
+    const problems = [...status.missing, ...status.invalid];
     throw new AuthConfigurationError(
-      `Authentication is not configured. Missing: ${status.missing.join(", ")}`,
+      `Authentication configuration is invalid: ${problems.join(", ")}`,
     );
   }
 
