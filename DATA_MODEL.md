@@ -233,6 +233,7 @@ Responsibilities:
   "job_type": "ingest|analyze|retrieve_candidates|reconstruct_moment|story_discovery",
   "status": "queued|running|succeeded|failed|retrying",
   "attempt_count": 0,
+  "temporal_workflow_id": "string|null",
   "input_ref": "string|null",
   "output_ref": "string|null",
   "error_message": "string|null",
@@ -276,6 +277,6 @@ The schema should remain intentionally narrow. It should support essential memor
 
 ## Runtime mapping
 
-The Node.js implementation uses TypeScript camelCase fields and stores the domain `id` as MongoDB `_id`. MongoDB remains canonical for fragments and moments. Tiger Data stores only a derived retrieval projection for group-visible fragments: group ID, fragment ID, capture time, semantic summary, and entity keys. It does not own the raw fragment, permissions, or moment records.
+The Node.js implementation uses TypeScript camelCase fields and stores the domain `id` as MongoDB `_id`. MongoDB remains canonical for fragments, moments, and user-visible processing-job status; a job stores the Temporal workflow ID for operations/reconciliation. Temporal owns execution/retry history, not business records. Tiger Data stores only a derived retrieval projection for group-visible fragments: group ID, fragment ID, capture time, semantic summary, and entity keys. It does not own the raw fragment, permissions, or moment records.
 
 The initial Tiger retrieval path filters by group and time, optionally applies lexical matching, and orders candidates by distance from the window midpoint. Vector search is intentionally not implemented until an embedding model and dimensionality are selected. Private and restricted fragments must not be written to the group retrieval index.

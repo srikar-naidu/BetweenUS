@@ -257,3 +257,60 @@ This uses Tinker for an actual model-improvement question while protecting the l
 
 - Pros: measurable partner use, reproducible improvement report, no mandatory production dependency
 - Cons: separate training workflow and possible second model/inference interface; may yield no deployable improvement
+
+## Decision 12: Use Temporal as the single durable processing orchestrator
+
+### Context
+
+Fragment processing includes multiple steps, external providers, retries, and deletion cleanup that may outlive an HTTP request. A separate Mongo polling queue would duplicate orchestration state and retry logic.
+
+### Chosen approach
+
+Use the Temporal TypeScript SDK for the fragment-processing workflow and a Node worker. MongoDB remains canonical for business records and user-visible job status; do not run a second Mongo-backed queue. Use Temporal Cloud only after access, cost, and Render connectivity are verified.
+
+### Reason
+
+The media/AI pipeline has a real need for durable retries and recovery, and the TypeScript SDK matches the selected application runtime.
+
+### Trade-offs
+
+- Pros: durable retries, recovery, activity timeouts, visible workflow state
+- Cons: another service and persistent workflow history; activities must be idempotent and inputs must stay small/non-sensitive
+
+## Decision 13: Add Sentry for pilot observability with strict data minimization
+
+### Context
+
+The final MVP spans uploads, Temporal activities, local Gemma, Backboard, Tiger Data, and opt-in ElevenLabs calls. Provider and worker failures need actionable diagnostics, but these requests can contain sensitive memories.
+
+### Chosen approach
+
+Instrument Next.js and the Temporal worker for errors and latency while disabling request/response bodies, GenAI inputs/outputs, user identity, local variables, and replay capture. Scrub events/spans and correlate with opaque job IDs.
+
+### Reason
+
+This enables staging/pilot debugging without creating a second content store for personal memories.
+
+### Trade-offs
+
+- Pros: better visibility into timeouts, failed uploads, workflow retries, and provider outages
+- Cons: less payload-level debugging; scrubbers and event sampling must be maintained
+
+## Decision 14: Defer sponsor tools that duplicate selected roles or lack a product need
+
+### Context
+
+The event includes more sponsor tools than the product should place on its critical path.
+
+### Chosen approach
+
+Defer Mastra because Temporal plus typed provider adapters cover the present linear workflow; defer SerpApi because web search is not a product requirement; defer DigitalOcean because Render is already selected. Consider TabPFN only for aggregate, non-identifying event patterns after enough labeled moments exist. Use Entire only as an optional development tool if its Copilot CLI/external-agent integration fits the team's workflow; do not migrate the app's hosting or source of truth.
+
+### Reason
+
+The project should maximize useful sponsor participation without duplicating orchestration, adding unrelated search, or splitting deployment infrastructure.
+
+### Trade-offs
+
+- Pros: fewer operational systems and clearer sponsor value
+- Cons: several sponsors remain evaluation/development-only rather than runtime integrations

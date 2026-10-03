@@ -193,3 +193,9 @@ The system should encode these as model constraints in the Context Packet and in
 ## Decision principle
 
 A good Context Packet should answer only one question clearly: “Given this small body of evidence, what is the most defensible conclusion we can make right now?”
+
+## Workflow and telemetry boundaries
+
+Temporal is an execution history, not a context database. Pass opaque fragment/job IDs and small status values through workflows. Activities fetch authorized context from MongoDB/Tiger Data, persist sensitive results in their canonical/derived stores, and return opaque IDs/status only. Do not store raw media, extracted text, transcripts, embeddings, full ContextPackets, or model prompts/completions in workflow history.
+
+Sentry should receive scrubbed error categories, timings, and opaque job IDs only. Disable request/response bodies and generative-AI input/output capture so observability does not become another memory store.

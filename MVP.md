@@ -62,6 +62,10 @@ Voice notes may be transcribed through ElevenLabs only after the author opts in,
 
 After collecting a baseline evaluation set, run one bounded, de-identified model-specialization experiment with Tinker if the account and model catalog support it. Report the result; do not make Tinker a production inference dependency unless it beats the baseline and passes privacy, quality, compatibility, and budget gates.
 
+### 11. Durable processing and pilot monitoring
+
+Use Temporal for the multi-step processing workflow and retries, with MongoDB retaining canonical job status. Use Sentry for staging/pilot failures and latency only after disabling request bodies, AI content, media, user identity, stack locals, and replay capture.
+
 ## Explicit non-goals for MVP
 
 The MVP does not include:

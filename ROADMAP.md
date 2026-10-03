@@ -22,6 +22,8 @@ MVP scope includes:
 - basic corrections
 - group-scoped Backboard memory for member-confirmed corrections and aliases
 - opt-in voice-note transcription through ElevenLabs, only after privacy/retention and credit checks
+- Temporal workflows for durable multi-step processing and retries
+- Sentry monitoring with request bodies, AI content, media, and user identity collection disabled
 - a capped Tinker specialization experiment with a written baseline comparison; not required for production inference
 
 The phase-by-phase implementation sequence and release gates are in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
@@ -37,7 +39,6 @@ Features may include:
 - better person and place extraction
 - initial support for story-like group memory summaries
 - improved uncertainty labeling and user corrections
-- operational background jobs and scheduling
 
 ## V2
 
@@ -62,21 +63,19 @@ Examples:
 - longer-horizon story discovery
 - stronger multimodal extraction experiments
 - additional Tinker training iterations only if the bounded MVP experiment shows a measurable need
+- TabPFN experiment on aggregated, non-identifying activity patterns after enough labeled moments exist
+- Entire development-session provenance only if its Copilot CLI/external-agent integration fits the team workflow
 
 ## Optional partner technologies
 
-The following technologies should not be added to the MVP unless a concrete requirement appears:
+The following technologies remain deferred because there is no MVP product requirement or a selected service already covers the responsibility:
 
-- TabPFN
-- Entire
 - Mastra
-- Sentry
-- Temporal
 - SerpApi
 - DigitalOcean
 - Arduino
 
-These belong in the roadmap only after the core product is validated and the use case is defensible.
+Mastra overlaps with Temporal and the typed provider adapters; SerpApi adds unrelated web search to a private-memory product; DigitalOcean duplicates the selected Render deployment. Revisit only if a concrete requirement changes that trade-off.
 
 ## Tinker experiment
 

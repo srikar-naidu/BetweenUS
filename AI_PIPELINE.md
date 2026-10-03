@@ -228,6 +228,7 @@ The server derives `unknown`, `possible`, or `likely` using the fixed thresholds
 
 ## Planned partner lanes for the final MVP
 
+- Temporal owns the durable `ProcessFragmentWorkflow`; workflow steps pass opaque IDs and small statuses, while activities load authorized media/context from canonical stores, persist sensitive outputs there, and return opaque references. Sentry records scrubbed failures and timings only.
 - Backboard: after a member confirms a correction or alias, write that high-level fact to the group's Backboard assistant and store provider IDs/provenance in MongoDB. Reconstruction may retrieve a few relevant memories read-only. Never auto-write speculative model output.
 - ElevenLabs: only an explicitly opted-in voice note is sent to Scribe from a server-side processing job. The returned transcript is linked to the source audio and reviewed by its author before group use.
 - Tinker: run a separate, budget-capped experiment on a de-identified labeled dataset after the Gemma baseline exists. Tinker is not part of the upload/reconstruction request path by default.

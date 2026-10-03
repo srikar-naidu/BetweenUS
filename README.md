@@ -42,6 +42,8 @@ The architecture is intentionally small and local-first:
 - Retrieval layer: Tiger Data for temporal and lexical candidate search; vectors are deferred until an embedding model is selected
 - Persistent, confirmed group memory: Backboard
 - Opt-in voice-note transcription: ElevenLabs Scribe, after privacy and credit gates
+- Durable processing: Temporal TypeScript workflows
+- Privacy-scrubbed observability: Sentry
 - Deployment: Render
 - Bounded model-specialization experiment: Tinker, compared against Gemma; not the default runtime
 

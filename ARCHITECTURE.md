@@ -14,7 +14,8 @@ flowchart LR
     FE --> API[Backend API]
     API --> DB[(MongoDB Atlas)]
     API --> RETR[Tiger Data\nTemporal + Lexical Retrieval]
-    API --> WORKER[Background Processing Worker]
+    API --> TEMPORAL[Temporal Workflow]
+    TEMPORAL --> WORKER[Node Temporal Worker]
     WORKER --> INGEST[Fragment Ingest + Metadata]
     INGEST --> CAND[Candidate Retrieval]
     CAND --> PACK[Context Packet Builder]
@@ -23,6 +24,8 @@ flowchart LR
     OUT --> DB
     OUT --> MEM[Backboard Memory]
     MEM --> RETR
+    API -. scrubbed errors/traces .-> SENTRY[Sentry]
+    WORKER -. scrubbed errors/traces .-> SENTRY
 ```
 
 ## Components
@@ -45,6 +48,10 @@ The worker handles expensive operations such as:
 
 
 It runs asynchronously so uploads do not block the user experience.
+
+### Temporal
+
+Temporal is the durable execution owner for fragment-processing workflows and activity retries. Use the TypeScript SDK and a Node worker. MongoDB remains canonical for user-visible job status and domain records; do not run a second Mongo-polled queue. Workflow history receives opaque IDs and small status values only. Activities persist sensitive results in MongoDB/Tiger and return opaque IDs/status, never media, extracted text, full prompts, or transcripts.
 
 ### Gemma
 
@@ -105,11 +112,15 @@ It should support:
 
 Render hosts the deployment. The initial deployment should be simple and focused:
 
-- frontend
-- backend API
-- background worker
+- Next.js frontend/API service
+- Node Temporal worker
+- connection to the approved Temporal service
 
 Only add more services if the architecture truly requires them.
+
+### Sentry
+
+Sentry monitors Next.js and worker errors, provider failures, and latency at staging/pilot. Disable request/response bodies, generative-AI input/output capture, user identity, stack locals, and session replay. Scrub custom events/spans; correlate with opaque job IDs only.
 
 ### ElevenLabs
 
@@ -126,6 +137,8 @@ The system should separate responsibilities clearly:
 - MongoDB: application truth and operational records
 - Tiger Data: retrieval index and time-aware search layer
 - Backboard: persistent memory and contextual recall
+- Temporal: durable workflow execution and activity retries
+- Sentry: privacy-scrubbed errors and traces
 - ElevenLabs: opt-in voice-note transcription only
 - Tinker: isolated, measured model-specialization experiment
 - Gemma: reasoning over selected candidate context
@@ -138,6 +151,8 @@ The architecture should isolate failures by layer:
 - upload failure: isolated to storage and processing job creation
 - retrieval failure: degrade gracefully to simpler candidate search
 - AI model failure: return structured uncertainty or retry with narrower context
+- Temporal activity failure: retry only idempotent operations and surface terminal status in MongoDB
+- Sentry failure: never block upload, processing, or reconstruction
 - persistence failure: do not allow a stale AI result to be treated as fact
 - permission failure: deny access at API boundaries without leaking metadata
 

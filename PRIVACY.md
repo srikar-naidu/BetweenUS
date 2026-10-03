@@ -114,3 +114,15 @@ If the system is uncertain whether a fragment should be used in a shared inferen
 - Tinker is an offline experiment, not a production inference dependency by default.
 - Use synthetic or explicitly de-identified/consented training examples only. Never upload private group media, raw Backboard memory, or personal identifiers.
 - Use a dedicated project, a hard spend cap, and documented cleanup for training runs/checkpoints. Confirm current model support and data terms before sending any sample.
+
+### Temporal
+
+- Temporal workflow history can persist for retries and replay; pass only opaque IDs and minimal status metadata.
+- Activities fetch authorized media/context from canonical stores at execution time. Persist sensitive outputs to MongoDB/Tiger and return opaque IDs/status only. Never put binary media, extracted text, transcripts, full ContextPackets, model prompts/completions, or access tokens in workflow arguments/results.
+- Use idempotency keys and authorization checks in every activity. Workflow failure must not widen visibility or bypass deletion.
+
+### Sentry
+
+- Disable request/response body, generative-AI input/output, user-identity, stack-local, and session-replay collection.
+- Scrub exception messages, breadcrumbs, spans, URLs, and tags so fragment text, group names, emails, transcripts, and credentials cannot enter telemetry.
+- Correlate using opaque job IDs and safe error categories. Sentry failure must not block product actions.

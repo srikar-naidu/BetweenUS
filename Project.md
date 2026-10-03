@@ -1740,3 +1740,30 @@ Build the smallest system that makes this sentence true:
 > **“I uploaded one tiny piece of my day, my friends uploaded different tiny pieces, and months later the system helped us remember the thing none of us actually documented.”**
 
 Everything in the architecture should serve that sentence.
+
+---
+
+# 47. Approved sponsor scope update (2026-10-03)
+
+This amendment records the user's final-MVP sponsor decisions while preserving the original project brief above.
+
+## Included in the final MVP
+
+- Gemma remains the default local reasoning model.
+- Backboard stores only confirmed, group-scoped high-level memory; MongoDB remains canonical.
+- Temporal owns durable fragment-processing execution and retries; MongoDB stores business/job status.
+- Sentry monitors the Next.js app and Temporal worker with media, request bodies, AI content, and direct user identifiers excluded.
+- ElevenLabs is used only for an explicitly opted-in voice-note transcription path after retention and credit checks.
+- Tinker gets one capped, de-identified baseline-comparison experiment after evaluation data exists; it does not replace Gemma by default.
+- Render remains the deployment target; GitHub Copilot remains a development aid, not runtime infrastructure.
+
+## Conditional or deferred sponsors
+
+- TabPFN is a post-pilot experiment on aggregated, non-identifying event patterns after enough labeled moments exist.
+- Entire is a development-only option if its Copilot CLI or a verified external-agent integration fits the team's workflow; it is not part of the application runtime.
+- Mastra is deferred because Temporal and the typed provider adapters cover the current pipeline without a second workflow engine.
+- SerpApi is excluded because the product has no web-search feature.
+- DigitalOcean is excluded because Render already covers deployment.
+- Arduino remains out of scope because no hardware interaction is part of the memory-reconstruction MVP.
+
+The implementation order, service boundaries, credit/privacy gates, UI direction, and release criteria are defined in `IMPLEMENTATION_PLAN.md`.

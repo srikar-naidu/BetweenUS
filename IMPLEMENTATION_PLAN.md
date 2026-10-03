@@ -33,6 +33,8 @@ A moment is the main product object. This is not a public feed, generic chatbot,
 - Let members inspect evidence, reject a merge, correct an interpretation, and confirm a moment.
 - Store confirmed group corrections and stable aliases as group-scoped Backboard memories with MongoDB provenance.
 - Provide an opt-in ElevenLabs speech-to-text path for voice-note fragments, subject to the consent and retention gate below.
+- Orchestrate media-processing jobs through Temporal workflows with MongoDB holding canonical job status and business data.
+- Monitor application and worker failures in Sentry with request bodies, AI prompts/outputs, media, and direct identifiers scrubbed or disabled.
 - Evaluate a Tinker specialization experiment against the local Gemma baseline; keep the app's default inference path local Gemma.
 
 ### Explicitly out of scope
@@ -57,6 +59,8 @@ A moment is the main product object. This is not a public feed, generic chatbot,
 | Backboard | High-level, explicitly confirmed group memory: aliases, recurring references, approved corrections | Raw media, speculative claims, private member memory, canonical state |
 | ElevenLabs | Opt-in speech transcription for voice-note fragments only | Default processing for other media, memory storage, generated voice |
 | Tinker | Time-boxed training/sampling experiment on approved de-identified examples | Default app request path or unapproved personal media |
+| Temporal | Durable fragment-processing workflows, retries, timeouts, and activity execution | Canonical user/group/moment data or large media/prompt payloads in workflow history |
+| Sentry | Error/performance monitoring for Next.js and processing workers, with strict privacy scrubbing | Raw media, request bodies, prompts/completions, auth credentials, direct user identifiers |
 | Render | Next.js web service and Node processing worker | Durable work state without MongoDB job records |
 
 ### Data path
@@ -67,8 +71,9 @@ flowchart LR
   UI --> AUTH[Auth + group authorization]
   AUTH --> UP[Private media upload]
   UP --> MDB[(MongoDB canonical records)]
-  UP --> JOB[Idempotent processing job]
-  JOB --> EX[Gemma extraction / optional ElevenLabs STT]
+  UP --> TEMP[Temporal ProcessFragmentWorkflow]
+  TEMP --> WORKER[Node Temporal Worker]
+  WORKER --> EX[Gemma extraction / optional ElevenLabs STT]
   EX --> RET[Tiger time + vector retrieval]
   RET --> PACK[Small group-scoped ContextPacket]
   PACK --> GEM[Local Gemma reconstruction]
@@ -78,6 +83,8 @@ flowchart LR
   CORR[Member-confirmed correction] --> MDB
   CORR --> BB[Backboard group memory]
   EVAL[De-identified eval set] --> T[Tinker experiment]
+  OBS[Sentry, scrubbed errors/traces] -.-> UI
+  OBS -.-> WORKER
 ```
 
 MongoDB is authoritative. Tiger and Backboard are derived/context services that can be rebuilt or reconciled from authorized MongoDB state and provenance records. Backboard service failure must not block normal fragment uploads or erase MongoDB state.
@@ -89,6 +96,8 @@ MongoDB is authoritative. Tiger and Backboard are derived/context services that 
 Do this before consuming provider credits or implementing external integrations.
 
 - Confirm actual remaining Backboard, Tinker, and ElevenLabs credits, expiry, allowed use, rate limits, and billing behavior from the developer accounts. The plan does not assume credits are unlimited or still active.
+- Verify Temporal Cloud availability/credits and establish a small usage budget; choose Cloud only if account terms and deployment connectivity fit the Render worker.
+- Review Sentry plan limits and retention. Disable capture of media, HTTP bodies, AI inputs/outputs, auth/session data, and direct user identifiers before sending any events.
 - Set an explicit maximum spend for each provider. Add usage logging and a feature flag before any billable call.
 - Review provider data retention/training terms. ElevenLabs documents zero-retention mode as enterprise-only; do not send real voice notes until consent, retention, and deletion terms are acceptable.
 - Check Tinker's live supported-model catalog and whether the local Gemma 4 model/weights can be used. Do not assume Gemma compatibility. Confirm sampling/checkpoint options and billing for the account.
@@ -113,7 +122,9 @@ Do this before consuming provider credits or implementing external integrations.
 - Implement private signed uploads for images, screenshots, and short videos; store bytes in the selected private object store and metadata in MongoDB.
 - Add text-fragment creation and capture-time/time-zone handling.
 - Store source, author, group, visibility, consent, MIME type, capture time, checksum, and processing version.
-- Create idempotent Mongo-backed jobs with bounded retries for extraction, embedding, candidate search, reconstruction, and deletion cleanup.
+- Use Temporal as the processing orchestrator: `ProcessFragmentWorkflow` schedules idempotent Node activities for extraction, embedding, candidate search, reconstruction, and deletion cleanup with explicit timeouts/retries.
+- Store only opaque Mongo fragment/job IDs and small status data in Temporal workflow history; activities fetch authorized bytes and context from their canonical stores. Activities persist sensitive outputs in MongoDB/Tiger and return opaque IDs/status, not extracted text, transcripts, prompts, or completions. Never place media or full ContextPackets in workflow inputs/results.
+- Mirror user-facing processing status, provider references, and final outputs into MongoDB. Do not run a second Mongo polling queue alongside Temporal.
 - Enforce file-size/duration limits and validate MIME types from file content, not only client headers.
 
 **Exit gate:** uploads survive server restarts, duplicate job retries do not create duplicate fragments, and a deletion request removes the source object and marks dependent AI state stale.
@@ -210,10 +221,28 @@ Make the interface bold and emotionally alive, but keep evidence and privacy unm
 - Evaluate on a held-out, labeled dataset (target: 50–100 fragments across multiple small events and unrelated near-neighbors). Include spec cases: same place/different event, same people/different event, misleading text, single uploader, mixed media, and insufficient evidence.
 - Require 100% valid evidence IDs after server validation, zero cross-group leaks, zero private-fragment evidence leakage, and no confirmed moment without explicit member action. Track false merges and misses; block launch if false merges exceed the agreed pilot threshold.
 - Test provider outage, malformed Gemma output, Backboard timeout, ElevenLabs quota exhaustion, queue retries, media deletion, and duplicate uploads.
+- Configure Sentry for Next.js server/client and the Temporal worker. Disable HTTP body and GenAI input/output capture, user identity collection, and session replay; add explicit redaction in `beforeSend`/span hooks. Emit only opaque job IDs and safe error categories.
+- Verify a test exception and workflow-activity failure arrive in Sentry without request bodies, AI prompts/completions, media URLs, direct user identity, or raw provider response text.
 - Deploy a Next.js web service plus a Node worker to Render; MongoDB is canonical, Tiger is rebuildable, Backboard and external speech providers have explicit timeout/fallback behavior.
+- Connect the Node worker to Temporal Cloud or the approved Temporal deployment and verify workflow retries/recovery in staging.
 - Start with an invite-only pilot group, collect corrections and user-perceived errors, and re-run the eval set before widening access.
 
 **Release gate:** all privacy/evidence acceptance checks pass; one complete multi-user upload-to-moment workflow succeeds in staging; provider cost caps and deletion checks are confirmed.
+
+## Additional sponsor experiments and explicit deferrals
+
+| Sponsor | MVP decision | Product fit and gate |
+|---|---|---|
+| GitHub Copilot | Use during development | Document meaningful use in scaffolding, tests, route/repository code, and debugging. It is not runtime infrastructure. |
+| TabPFN | Post-MVP experiment only | Once enough member-approved moments exist, compare a TabPFN classifier/forecaster against simple baselines using aggregated, non-identifying group activity features. Do not send raw fragments or infer personal traits; skip it if the sample is too small or the result does not improve a real feature. |
+| Entire | Optional development-only trial | Entire documents a built-in Copilot CLI integration, not the VS Code extension. Use only if the team chooses Copilot CLI or a verified agent integration and the setup is low-friction. Keep GitHub as the source of truth; do not migrate the repo or include user media/session secrets. Skip otherwise. |
+| Sentry | Include for staging/pilot | Add the official `@sentry/nextjs` SDK for provider failures, upload errors, workflow activity failures, and latency. Disable bodies, prompts/completions, media, stack locals, replay, and direct identifiers; scrub exceptions/spans. |
+| Temporal | Include for processing durability | Add the Temporal TypeScript client/worker/workflow SDKs. The pipeline needs retries, timeouts, and recovery. Temporal owns execution state; MongoDB owns business state and user-visible job status. |
+| SerpApi | Do not use in MVP | There is no web-research user story, and internet search adds privacy and factuality risks without helping reconstruct private group memories. |
+| DigitalOcean | Do not use in MVP | Render is already the deployment target; adding a second hosting platform duplicates operations without a requirement. |
+| Mastra | Defer | Mastra workflows/agents would overlap with the chosen Temporal orchestration and direct typed provider adapters. Revisit only if AI branching/tool orchestration becomes hard to maintain; do not deploy both workflow engines for the current linear pipeline. |
+
+These deferrals are intentional sponsor decisions, not unfinished integrations. See [ROADMAP.md](ROADMAP.md) for when the TabPFN and Entire experiments can be reconsidered.
 
 ## Provider and credit policy
 
@@ -228,21 +257,25 @@ Make the interface bold and emotionally alive, but keep evidence and privacy unm
 ```text
 Access + privacy decisions
   -> authentication + group isolation
-  -> secure media storage + jobs
+  -> secure media storage + Temporal workflows
   -> Gemma baseline + eval data
   -> Tiger retrieval + Moment validation
   -> Backboard confirmed group memory
   -> final UI + correction flow
   -> ElevenLabs opt-in voice lane
   -> Tinker benchmark/training experiment
-  -> Render pilot + release gate
+  -> Sentry privacy-safe monitoring
+  -> Render + Temporal pilot and release gate
 ```
 
-Build and test the UI shell alongside the first four engineering phases. ElevenLabs and Tinker are isolated work packages and must not block the core image/text fragment-to-moment path.
+Build and test the UI shell alongside the first four engineering phases. ElevenLabs, Tinker, Entire, and TabPFN are isolated/optional work packages and must not block the core image/text fragment-to-moment path. Temporal and Sentry are used for reliability at the pilot gate, not as reasons to delay the local demo.
 
 ## References checked for planning
 
 - [Backboard persistent memory](https://backboard-docs.docsalot.dev/sdk/memory.md) and [assistant/thread architecture](https://backboard-docs.docsalot.dev/concepts/architecture.md)
 - [Tinker quickstart](https://tinker-docs.thinkingmachines.ai/tinker/quickstart/), [current model catalog](https://tinker-docs.thinkingmachines.ai/tinker/models.json), and [data isolation/permissions](https://tinker-docs.thinkingmachines.ai/tinker/data-model/)
 - [ElevenLabs speech-to-text API](https://elevenlabs.io/docs/api-reference/speech-to-text/convert) and [model capabilities](https://elevenlabs.io/docs/overview)
+- [Temporal TypeScript SDK](https://docs.temporal.io/develop/typescript), [activity retries/timeouts](https://docs.temporal.io/develop/typescript/activities/execution), and [workflow determinism](https://docs.temporal.io/develop/typescript/workflows/basics)
+- [Sentry for Next.js](https://docs.sentry.io/platforms/javascript/guides/nextjs/) and [data collection options](https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/)
+- [TabPFN capabilities](https://docs.priorlabs.ai/), [Entire agent integrations](https://docs.entire.io/agents/overview), and [Mastra workflows](https://mastra.ai/docs/workflows/overview)
 - [Next.js local documentation](node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/route.md)
