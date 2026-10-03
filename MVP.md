@@ -24,11 +24,11 @@ user sees evidence-backed moment
 
 ### 1. Authentication, groups, and permissions
 
-Users can create or join a private group. Server-side authorization applies to uploads, fragments, candidate retrieval, moments, evidence, corrections, and deletion.
+Users sign in through Better Auth with Google OAuth, then create or join private groups through the organization/membership model. Invitations are email-bound and require a verified matching account. Server-side authorization applies to uploads, fragments, candidate retrieval, moments, evidence, corrections, and deletion.
 
 ### 2. Fragment upload
 
-Users can upload one or more fragments, including photos or screenshots, each with metadata and a timestamp.
+Users can upload one or more fragments, including photos or screenshots, each with metadata and a timestamp. New fragments default to private with AI processing disabled; changing visibility or granting AI consent is an author-only operation.
 
 ### 3. Fragment analysis
 

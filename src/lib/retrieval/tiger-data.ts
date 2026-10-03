@@ -71,6 +71,21 @@ export class TigerDataFragmentSearch {
     );
   }
 
+  async removeGroupVisibleFragment(groupId: string, fragmentId: string): Promise<void> {
+    await this.sql.query(
+      `DELETE FROM fragment_search
+       WHERE group_id = $1 AND fragment_id = $2`,
+      [groupId, fragmentId],
+    );
+  }
+
+  async removeGroupFragments(groupId: string): Promise<void> {
+    await this.sql.query(
+      `DELETE FROM fragment_search WHERE group_id = $1`,
+      [groupId],
+    );
+  }
+
   async findCandidates(
     query: TemporalFragmentQuery,
   ): Promise<TemporalFragmentCandidate[]> {

@@ -101,7 +101,7 @@ Do this before consuming provider credits or implementing external integrations.
 - Set an explicit maximum spend for each provider. Add usage logging and a feature flag before any billable call.
 - Review provider data retention/training terms. ElevenLabs documents zero-retention mode as enterprise-only; do not send real voice notes until consent, retention, and deletion terms are acceptable.
 - Check Tinker's live supported-model catalog and whether the local Gemma 4 model/weights can be used. Do not assume Gemma compatibility. Confirm sampling/checkpoint options and billing for the account.
-- Choose the production identity provider and private object-storage provider. Keep both behind interfaces; do not store production media on ephemeral Render disk.
+- Configure the selected Better Auth + Google OAuth provider credentials and callback. Choose the private object-storage provider; keep media behind an adapter and do not store production media on ephemeral Render disk.
 - Lock fragment size/type limits, visibility defaults, and consent text.
 - Design the key product screens and UI tokens before implementing their final layouts.
 
@@ -109,7 +109,7 @@ Do this before consuming provider credits or implementing external integrations.
 
 ### Phase 1: Trust foundation and real group boundaries
 
-- Implement authentication, group creation/invites, membership roles, and server-side authorization helpers.
+- Implement Better Auth Google sign-in, MongoDB-backed sessions, group creation/invites, membership roles, and server-side authorization helpers. Use the Google callback `/api/auth/callback/google` and require verified email for email-bound invitations.
 - Add tests proving users cannot enumerate or retrieve another group's fragments, moments, evidence, or Backboard assistant ID.
 - Add per-fragment visibility and explicit AI-use consent. Default to private until the member chooses group visibility and eligible processing.
 - Create deletion states and provenance links so dependent observations, retrieval entries, Backboard memories, and stored media can be removed or invalidated.

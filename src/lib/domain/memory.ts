@@ -9,6 +9,7 @@ export type FragmentType =
 
 export type FragmentVisibility = "private" | "group" | "restricted";
 export type FragmentStatus = "uploaded" | "processing" | "processed" | "rejected";
+export type FragmentDeletionState = "active" | "pending" | "deleted";
 export type MomentStatus = "draft" | "candidate" | "confirmed" | "rejected";
 export type UncertaintyLabel = "confirmed" | "likely" | "possible" | "unknown";
 
@@ -31,6 +32,12 @@ export interface Fragment {
   createdAt: Date;
   metadata: FragmentMetadata;
   visibility: FragmentVisibility;
+  aiProcessingConsent: boolean;
+  aiProcessingConsentAt: Date | null;
+  aiProcessingConsentRevokedAt: Date | null;
+  deletionState: FragmentDeletionState;
+  deletionRequestedAt: Date | null;
+  deletionRequestedByUserId: string | null;
   status: FragmentStatus;
 }
 
@@ -43,6 +50,7 @@ export interface NewFragment {
   capturedAt: Date;
   metadata?: FragmentMetadata;
   visibility?: FragmentVisibility;
+  aiProcessingConsent?: boolean;
 }
 
 export interface MomentEvidence {

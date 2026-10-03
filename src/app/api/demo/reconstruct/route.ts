@@ -3,10 +3,7 @@ import { runDemoReconstruction } from "@/lib/pipeline/demo-reconstruction";
 export const runtime = "nodejs";
 
 export async function POST() {
-  if (
-    process.env.NODE_ENV === "production" &&
-    process.env.ENABLE_DEMO_PIPELINE !== "true"
-  ) {
+  if (process.env.NODE_ENV !== "development") {
     return new Response(null, { status: 404 });
   }
 

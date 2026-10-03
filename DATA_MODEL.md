@@ -96,6 +96,12 @@ Responsibilities:
     "mime_type": "string"
   },
   "visibility": "private|group|restricted",
+  "ai_processing_consent": false,
+  "ai_processing_consent_at": "datetime|null",
+  "ai_processing_consent_revoked_at": "datetime|null",
+  "deletion_state": "active|pending|deleted",
+  "deletion_requested_at": "datetime|null",
+  "deletion_requested_by_user_id": "string|null",
   "status": "uploaded|processing|processed|rejected",
   "processing_job_id": "string|null"
 }
@@ -259,6 +265,7 @@ Responsibilities:
 - Story belongs to a group
 - AIObservation belongs to the relevant entity or group context
 - Permission is scoped by group, user, and object
+- Better Auth owns identity/session/OAuth account records and the group/member/invitation collections; group data APIs consume only verified server sessions and membership rows.
 
 ### Relationships
 
@@ -277,6 +284,6 @@ The schema should remain intentionally narrow. It should support essential memor
 
 ## Runtime mapping
 
-The Node.js implementation uses TypeScript camelCase fields and stores the domain `id` as MongoDB `_id`. MongoDB remains canonical for fragments, moments, and user-visible processing-job status; a job stores the Temporal workflow ID for operations/reconciliation. Temporal owns execution/retry history, not business records. Tiger Data stores only a derived retrieval projection for group-visible fragments: group ID, fragment ID, capture time, semantic summary, and entity keys. It does not own the raw fragment, permissions, or moment records.
+The Node.js implementation uses TypeScript camelCase fields and stores the domain `id` as MongoDB `_id`. Better Auth stores users, sessions, OAuth accounts, groups (organizations), group members, and invitations in MongoDB collections. Better Auth groups use ObjectId-backed IDs; application routes normalize/validate IDs and check membership on the server. MongoDB remains canonical for fragments, moments, consent, deletion requests, and user-visible processing-job status; a job stores the Temporal workflow ID for operations/reconciliation. Temporal owns execution/retry history, not business records. Tiger Data stores only a derived retrieval projection for group-visible, AI-consented fragments: group ID, fragment ID, capture time, semantic summary, and entity keys. It does not own raw fragments, permissions, or moment records.
 
 The initial Tiger retrieval path filters by group and time, optionally applies lexical matching, and orders candidates by distance from the window midpoint. Vector search is intentionally not implemented until an embedding model and dimensionality are selected. Private and restricted fragments must not be written to the group retrieval index.
