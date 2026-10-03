@@ -13,7 +13,15 @@ type MomentDocument = Omit<Moment, "id"> & { _id: string };
 
 function asFragment(document: FragmentDocument): Fragment {
   const { _id, ...fragment } = document;
-  return { ...fragment, id: _id };
+  return {
+    ...fragment,
+    id: _id,
+    textContent: fragment.textContent ?? null,
+    source: fragment.source ?? "legacy",
+    capturedTimeZone: fragment.capturedTimeZone ?? null,
+    checksumSha256: fragment.checksumSha256 ?? null,
+    processingVersion: fragment.processingVersion ?? "legacy",
+  };
 }
 
 function asMoment(document: MomentDocument): Moment {
@@ -43,11 +51,18 @@ export class MongoMemoryRepository {
 
   async createFragment(input: NewFragment): Promise<Fragment> {
     const now = new Date();
+    const { id, ...fields } = input;
     const aiProcessingConsent = input.aiProcessingConsent === true;
     const fragment: FragmentDocument = {
-      _id: randomUUID(),
-      ...input,
+      _id: id ?? randomUUID(),
+      ...fields,
+      storageUri: input.storageUri ?? null,
       caption: input.caption ?? null,
+      textContent: input.textContent ?? null,
+      source: input.source ?? "legacy",
+      capturedTimeZone: input.capturedTimeZone ?? null,
+      checksumSha256: input.checksumSha256 ?? null,
+      processingVersion: input.processingVersion ?? "ingest-v1",
       metadata: input.metadata ?? {},
       visibility: input.visibility ?? "private",
       aiProcessingConsent,
@@ -59,7 +74,19 @@ export class MongoMemoryRepository {
       status: "uploaded",
       createdAt: now,
     };
-    await this.fragments.insertOne(fragment);
+    try {
+      await this.fragments.insertOne(fragment);
+    } catch (error) {
+      if (id && typeof error === "object" && error !== null && "code" in error && error.code === 11000) {
+        const existing = await this.fragments.findOne({
+          _id: id,
+          groupId: input.groupId,
+          authorUserId: input.authorUserId,
+        });
+        if (existing) return asFragment(existing);
+      }
+      throw error;
+    }
     return asFragment(fragment);
   }
 
@@ -69,6 +96,22 @@ export class MongoMemoryRepository {
       { _id: id },
       { $set: document, $setOnInsert: { _id: id } },
       { upsert: true },
+    );
+  }
+
+  async findFragmentById(groupId: string, fragmentId: string): Promise<Fragment | null> {
+    const document = await this.fragments.findOne({ _id: fragmentId, groupId });
+    return document ? asFragment(document) : null;
+  }
+
+  async updateFragmentStatus(
+    groupId: string,
+    fragmentId: string,
+    status: Fragment["status"],
+  ): Promise<void> {
+    await this.fragments.updateOne(
+      { _id: fragmentId, groupId, deletionState: "active" },
+      { $set: { status, updatedAt: new Date() } },
     );
   }
 

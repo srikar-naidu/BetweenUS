@@ -138,6 +138,10 @@ Remaining work: validate signed-in requests across two real groups at the API bo
 
 ### Phase 2: Ingestion, storage, and processing jobs
 
+**Current status: IMPLEMENTED LOCALLY; EXTERNAL INTEGRATION GATE OPEN.** The app now has group-authorized text ingestion, private R2 presigned uploads with server-side byte/type/duration/checksum validation, Mongo upload reservations and idempotent processing-job records, a separate Temporal worker/workflow for ingestion and deletion cleanup, private short-lived download URLs, and visible processing status. The real `.env` currently has no R2 or Temporal variable names, so R2/Temporal connectivity and the upload-survives-restart exit gate have not yet been verified.
+
+Before calling this phase complete, configure a private R2 bucket and CORS for the app's exact origins, configure a Temporal service and run `npm run worker`, then perform image, screenshot, video, text, retry, restart, and deletion checks through the app.
+
 - Implement private signed uploads for images, screenshots, and short videos; store bytes in the selected private object store and metadata in MongoDB.
 - Add text-fragment creation and capture-time/time-zone handling.
 - Store source, author, group, visibility, consent, MIME type, capture time, checksum, and processing version.

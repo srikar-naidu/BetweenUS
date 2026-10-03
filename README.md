@@ -73,6 +73,14 @@ Authentication also requires `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `GOOGLE_CL
 
 Run locally with `npm install`, then `npm run dev`. `npm test`, `npm run typecheck`, and `npm run build` provide the current verification gates.
 
+## Private uploads and processing worker
+
+Media uploads use Cloudflare R2 S3-compatible API credentials. Configure `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET` in the local `.env`; keep the bucket private. Configure its CORS policy to allow `PUT`, `GET`, and `HEAD` from `http://localhost:3000` (and the exact deployed app origin), with `Content-Type` as an allowed header. The app signs five-minute uploads and downloads; it does not expose the bucket publicly.
+
+Processing uses a separate Temporal worker. For a local Temporal service, set `TEMPORAL_ADDRESS=localhost:7233`, `TEMPORAL_NAMESPACE=default`, and `TEMPORAL_TLS=false`; for Temporal Cloud, use its namespace endpoint/namespace, TLS, and `TEMPORAL_API_KEY`. Start the app with `npm run dev` and the worker in a separate terminal with `npm run worker`. The worker receives opaque group, fragment, and job IDs only; it fetches authorized records from MongoDB and media from private R2.
+
+If R2 or Temporal is not configured, media upload and text-ingestion APIs return a configuration error instead of accepting work that cannot be processed. Do not put R2 or Temporal credentials in `NEXT_PUBLIC_` variables.
+
 
 ## Documentation set
 

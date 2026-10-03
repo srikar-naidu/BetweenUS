@@ -6,6 +6,7 @@ import { getAuth, getAuthConfigurationStatus } from "@/lib/auth";
 import { GroupAccessError, requireGroupMembership } from "@/lib/auth/group-access";
 import { visibleMomentsForMember } from "@/lib/auth/group-visibility";
 import { getMongoDatabase } from "@/lib/db/mongodb";
+import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 
 export const dynamic = "force-dynamic";
@@ -40,13 +41,22 @@ export default async function GroupPage({
     throw error;
   }
 
-  const repository = new MongoMemoryRepository(await getMongoDatabase());
+  const database = await getMongoDatabase();
+  const repository = new MongoMemoryRepository(database);
+  const ingestionRepository = new MongoIngestionRepository(database);
   const [memberFragments, groupMoments] = await Promise.all([
     repository.findMemberVisibleFragments(groupId, session.user.id),
     repository.listMoments(groupId),
   ]);
+  const processingStatuses = await ingestionRepository.latestProcessingStatusByFragmentIds(
+    groupId,
+    memberFragments.map((fragment) => fragment.id),
+  );
   const moments = visibleMomentsForMember(groupMoments, memberFragments);
-  const fragments: GroupFragmentView[] = memberFragments.map(({ storageUri: _storageUri, ...fragment }) => fragment);
+  const fragments: GroupFragmentView[] = memberFragments.map(({ storageUri: _storageUri, ...fragment }) => ({
+    ...fragment,
+    processingJobStatus: processingStatuses.get(fragment.id) ?? null,
+  }));
 
   return (
     <GroupDetail

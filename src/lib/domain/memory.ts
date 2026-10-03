@@ -8,6 +8,7 @@ export type FragmentType =
   | "other";
 
 export type FragmentVisibility = "private" | "group" | "restricted";
+export type FragmentSource = "upload" | "text" | "demo" | "legacy";
 export type FragmentStatus = "uploaded" | "processing" | "processed" | "rejected";
 export type FragmentDeletionState = "active" | "pending" | "deleted";
 export type MomentStatus = "draft" | "candidate" | "confirmed" | "rejected";
@@ -17,6 +18,7 @@ export interface FragmentMetadata {
   width?: number;
   height?: number;
   durationSeconds?: number;
+  fileSizeBytes?: number;
   mimeType?: string;
   location?: { latitude: number; longitude: number };
 }
@@ -26,8 +28,13 @@ export interface Fragment {
   groupId: string;
   authorUserId: string;
   type: FragmentType;
-  storageUri: string;
+  storageUri: string | null;
   caption: string | null;
+  textContent: string | null;
+  source: FragmentSource;
+  capturedTimeZone: string | null;
+  checksumSha256: string | null;
+  processingVersion: string;
   capturedAt: Date;
   createdAt: Date;
   metadata: FragmentMetadata;
@@ -42,11 +49,17 @@ export interface Fragment {
 }
 
 export interface NewFragment {
+  id?: string;
   groupId: string;
   authorUserId: string;
   type: FragmentType;
-  storageUri: string;
+  storageUri?: string | null;
   caption?: string | null;
+  textContent?: string | null;
+  source?: FragmentSource;
+  capturedTimeZone?: string | null;
+  checksumSha256?: string | null;
+  processingVersion?: string;
   capturedAt: Date;
   metadata?: FragmentMetadata;
   visibility?: FragmentVisibility;

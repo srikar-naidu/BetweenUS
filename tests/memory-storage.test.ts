@@ -283,6 +283,42 @@ test("new fragments default private and do not grant AI processing consent", asy
   assert.equal(inserted?.aiProcessingConsent, false);
 });
 
+test("fragment creation retries with the same scoped ID return the original record", async () => {
+  const documents = new Map<string, Record<string, unknown>>();
+  const fakeCollection = {
+    insertOne: async (document: Record<string, unknown>) => {
+      const id = String(document._id);
+      if (documents.has(id)) throw Object.assign(new Error("duplicate"), { code: 11000 });
+      documents.set(id, document);
+    },
+    findOne: async (filter: Record<string, unknown>) => {
+      const document = documents.get(String(filter._id));
+      if (!document || document.groupId !== filter.groupId || document.authorUserId !== filter.authorUserId) {
+        return null;
+      }
+      return document;
+    },
+  };
+  const repository = new MongoMemoryRepository({
+    collection: () => fakeCollection,
+  } as unknown as Db);
+  const input = {
+    id: "stable-fragment-id",
+    groupId: "group-a",
+    authorUserId: "user-a",
+    type: "text" as const,
+    textContent: "A note",
+    source: "text" as const,
+    capturedAt: new Date("2026-09-04T12:04:00Z"),
+  };
+
+  const first = await repository.createFragment(input);
+  const retry = await repository.createFragment(input);
+  assert.equal(first.id, retry.id);
+  assert.equal(documents.size, 1);
+  await assert.rejects(repository.createFragment({ ...input, groupId: "group-b" }));
+});
+
 test("group deletion marks the group pending and creates a cleanup request", async () => {
   const updates: Array<{ collection: string; filter: Record<string, unknown>; update: Record<string, unknown> }> = [];
   const multiUpdates: Array<{ collection: string; filter: Record<string, unknown>; update: Record<string, unknown> }> = [];
