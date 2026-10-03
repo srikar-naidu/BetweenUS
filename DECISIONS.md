@@ -127,11 +127,11 @@ This makes the product safer and more explainable. It is a direct response to ha
 - Pros: trustworthiness, explainability, better UX
 - Cons: more engineering effort, less narrative freedom for the model
 
-## Decision 6: Keep optional technologies out of the MVP
+## Decision 6: Add technologies only for a specific product role
 
 ### Context
 
-The challenge includes many optional technologies, but the initial product must stay narrow and focused.
+Partner availability or free credits are useful constraints, but do not justify adding a provider without a product role, privacy review, and usage cap.
 
 ### Options considered
 
@@ -141,16 +141,16 @@ The challenge includes many optional technologies, but the initial product must 
 
 ### Chosen approach
 
-Keep the initial implementation narrowly scoped to Gemma, MongoDB, Tiger Data, Backboard, Render, and a small supporting backend/frontend.
+Keep Gemma, MongoDB, Tiger Data, Backboard, Render, and the Next.js application on the core path. Use ElevenLabs only for opted-in voice transcription and Tinker only for a bounded, measured specialization experiment.
 
 ### Reason
 
-The product’s first value is proving that events can be reconstructed from fragments, not integrating a large technology stack.
+The product’s first value is proving that events can be reconstructed from fragments. Backboard supports confirmed group context, ElevenLabs supports a meaningful optional fragment type, and Tinker can test a measured baseline weakness without replacing the local default.
 
 ### Trade-offs
 
-- Pros: faster MVP, clearer focus, lower complexity
-- Cons: more deliberate future work is needed for advanced features
+- Pros: partner integrations map to specific responsibilities and can be disabled independently
+- Cons: extra privacy, billing, and failure-boundary work is required
 
 ## Decision 7: Use Next.js, TypeScript, and Node.js for the application runtime
 
@@ -200,3 +200,60 @@ This preserves a single source of truth while enabling retrieval before model-sp
 
 - Pros: minimal duplication, useful time-aware retrieval now, no invented embedding dimensions
 - Cons: index synchronization and eventual consistency must be handled by the future processing worker
+
+## Decision 9: Keep Backboard memory group-scoped and explicitly curated
+
+### Context
+
+Backboard stores memory at assistant scope and shares it across threads. Between Us requires strict group isolation and evidence-backed memories.
+
+### Chosen approach
+
+Create one Backboard assistant per group. Use explicit memory writes only for member-confirmed aliases and corrections; use read-only retrieval in ContextPackets. MongoDB remains canonical and stores provider IDs/provenance.
+
+### Reason
+
+This uses persistent memory for stable group context without storing raw media or treating model speculation as fact.
+
+### Trade-offs
+
+- Pros: persistent, relevant context with a clear group boundary and deletion mapping
+- Cons: assistant lifecycle, asynchronous provider operations, and cross-system deletion require dedicated handling
+
+## Decision 10: Use ElevenLabs only for opt-in voice-note transcription
+
+### Context
+
+Voice notes are a useful fragment type, and the developer has partner credits, but transcription sends audio to an external provider.
+
+### Chosen approach
+
+Offer server-side Scribe transcription only when the author opts in, provider retention/terms are acceptable, and credit caps are configured. Require transcript review before group use.
+
+### Reason
+
+This gives voice notes a defined product role without making cloud audio processing a default for private media.
+
+### Trade-offs
+
+- Pros: adds voice as an input modality and improves retrieval from spoken context
+- Cons: external data processing, quota/credit dependence, and transcript corrections are required
+
+## Decision 11: Run Tinker as a bounded offline experiment
+
+### Context
+
+The local Gemma baseline must be measured before specialization. Tinker has a current supported-model catalog and usage-based training/sampling; Gemma 4 compatibility and account credits are not assumed.
+
+### Chosen approach
+
+After an evaluation dataset exists, run one capped experiment on synthetic or de-identified/consented examples. Compare a supported checkpoint against Gemma on held-out grouping/evidence metrics. Keep Gemma as default unless the result passes quality, privacy, compatibility, and budget gates.
+
+### Reason
+
+This uses Tinker for an actual model-improvement question while protecting the local-first app path from an unverified hosted dependency.
+
+### Trade-offs
+
+- Pros: measurable partner use, reproducible improvement report, no mandatory production dependency
+- Cons: separate training workflow and possible second model/inference interface; may yield no deployable improvement

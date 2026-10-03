@@ -169,7 +169,9 @@ Extracted observations from a fragment, including likely people, location, activ
 
 Higher-level events or recurring stories that are reconstructed from multiple fragments.
 
-Backboard should store only the high-value, durable memory layer; it should not duplicate raw media or exhaustive fragment history.
+Backboard should store only the high-value, durable, member-confirmed group memory layer; it should not duplicate raw media or exhaustive fragment history. Use a separate Backboard assistant per group, since memories are shared across threads under the same assistant. Retrieve only a few relevant memories for each ContextPacket and keep memory writes explicit; do not enable automatic writes for speculative model output.
+
+For voice notes, send only the user-opted-in audio file to ElevenLabs for transcription. Do not include unrelated fragments, group histories, or Backboard context in the transcription request. The resulting transcript remains a derived observation linked to the source audio and must be reviewed before group-level use.
 
 ## Hallucination prevention
 

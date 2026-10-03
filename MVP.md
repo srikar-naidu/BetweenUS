@@ -22,9 +22,9 @@ user sees evidence-backed moment
 
 ## In-scope MVP functionality
 
-### 1. Group creation and user membership
+### 1. Authentication, groups, and permissions
 
-Users can create or join a group and upload content within that shared space.
+Users can create or join a private group. Server-side authorization applies to uploads, fragments, candidate retrieval, moments, evidence, corrections, and deletion.
 
 ### 2. Fragment upload
 
@@ -49,6 +49,18 @@ The user can see the moment summary and the fragment evidence supporting the inf
 ### 7. Correction capability
 
 The user can reject or correct a reconstructed moment so future memory state improves.
+
+### 8. Confirmed group memory
+
+Member-confirmed aliases and corrections may be mirrored into a group-scoped Backboard assistant. MongoDB remains canonical and stores memory provenance; Backboard never receives raw/private fragments or speculative candidate narratives.
+
+### 9. Optional voice notes
+
+Voice notes may be transcribed through ElevenLabs only after the author opts in, the privacy/retention review passes, and a credit cap is configured. The author reviews the transcript before group use. If unavailable, upload and reconstruction for other fragment types continue normally.
+
+### 10. Tinker experiment
+
+After collecting a baseline evaluation set, run one bounded, de-identified model-specialization experiment with Tinker if the account and model catalog support it. Report the result; do not make Tinker a production inference dependency unless it beats the baseline and passes privacy, quality, compatibility, and budget gates.
 
 ## Explicit non-goals for MVP
 
@@ -79,6 +91,8 @@ The system should identify the likely shared moment, produce a summary, show evi
 ## Current demo implementation
 
 The local demo implements a synthetic group with four fragments, temporal/lexical candidate retrieval, a structured Ollama/Gemma call, evidence-ID validation, and candidate moment persistence. It demonstrates the pipeline shape only; it is not yet a real authenticated multi-user upload flow and does not replace evaluation on a labeled dataset.
+
+The complete implementation sequence, UI direction, provider gates, and acceptance criteria for the final MVP are defined in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
 
 ## Hard requirement
 

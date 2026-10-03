@@ -226,6 +226,14 @@ The current demo requires every evidence ID to belong to the retrieved group-vis
 
 The server derives `unknown`, `possible`, or `likely` using the fixed thresholds in `AI_CONTRACTS.md`. It never lets Gemma mark a moment confirmed. Insufficient evidence returns an `unknown` result without persistence; unsupported evidence rejects the response. Confidence is displayed as a model/system signal and does not determine the label.
 
+## Planned partner lanes for the final MVP
+
+- Backboard: after a member confirms a correction or alias, write that high-level fact to the group's Backboard assistant and store provider IDs/provenance in MongoDB. Reconstruction may retrieve a few relevant memories read-only. Never auto-write speculative model output.
+- ElevenLabs: only an explicitly opted-in voice note is sent to Scribe from a server-side processing job. The returned transcript is linked to the source audio and reviewed by its author before group use.
+- Tinker: run a separate, budget-capped experiment on a de-identified labeled dataset after the Gemma baseline exists. Tinker is not part of the upload/reconstruction request path by default.
+
+The full phase sequence, data boundaries, credit gates, UI direction, and acceptance criteria are in [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md).
+
 ## Current runnable demo slice
 
 The Next.js demo route seeds one synthetic group with four group-visible fragments across photo, screenshot, video, and text types. It filters a 40-minute window around an anchor fragment, ranks candidates using the time window and a lexical term, sends only those candidates to local Gemma, validates that returned evidence IDs came from the candidate set, requires evidence from at least two fragments and two authors, and stores a candidate moment.

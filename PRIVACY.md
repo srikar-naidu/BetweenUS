@@ -91,3 +91,26 @@ The system should support:
 ## Privacy-by-default principle
 
 If the system is uncertain whether a fragment should be used in a shared inference, it should default to “do not include” rather than “assume it belongs.”
+
+## External AI providers
+
+### Backboard
+
+- Create a separate assistant for each group; assistant-level memories are shared across its threads.
+- Store only confirmed, high-level group facts and corrections. Do not store raw media, private fragment content, or speculative moment narratives.
+- Keep provider memory IDs and source provenance in MongoDB. Implement update/delete propagation and verify group deletion.
+- Retrieve memory read-only for context assembly; only explicitly confirmed corrections may be written.
+
+### ElevenLabs
+
+- Voice-note transcription is opt-in per author and disabled until provider retention, terms, credits, and account eligibility are reviewed.
+- Tell the uploader that audio leaves the local system for transcription. Send only the selected audio file, not a full ContextPacket or group history.
+- ElevenLabs documents zero-retention mode as enterprise-only; do not assume it is available on a free-credit account.
+- Show the transcript to the author for correction before it enters group-visible retrieval or reconstruction. Do not use voice cloning or TTS in the MVP.
+- If consent, quota, or provider availability is missing, keep voice processing disabled without affecting other uploads.
+
+### Tinker
+
+- Tinker is an offline experiment, not a production inference dependency by default.
+- Use synthetic or explicitly de-identified/consented training examples only. Never upload private group media, raw Backboard memory, or personal identifiers.
+- Use a dedicated project, a hard spend cap, and documented cleanup for training runs/checkpoints. Confirm current model support and data terms before sending any sample.

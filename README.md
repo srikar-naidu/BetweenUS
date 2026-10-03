@@ -40,9 +40,10 @@ The architecture is intentionally small and local-first:
 - Local AI layer: Gemma via Ollama
 - Application DB: MongoDB Atlas
 - Retrieval layer: Tiger Data for temporal and lexical candidate search; vectors are deferred until an embedding model is selected
-- Persistent memory: Backboard
+- Persistent, confirmed group memory: Backboard
+- Opt-in voice-note transcription: ElevenLabs Scribe, after privacy and credit gates
 - Deployment: Render
-- Future specialization: Tinker only if a clear training problem emerges
+- Bounded model-specialization experiment: Tinker, compared against Gemma; not the default runtime
 
 ## Current local runtime status
 
@@ -83,6 +84,7 @@ The product and architecture planning documents are:
 - MVP.md
 - ROADMAP.md
 - DECISIONS.md
+- IMPLEMENTATION_PLAN.md
 
 ## What is intentionally excluded from the first build
 

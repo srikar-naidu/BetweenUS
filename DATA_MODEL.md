@@ -44,6 +44,7 @@ Responsibilities:
   "name": "string",
   "description": "string|null",
   "created_by_user_id": "string",
+  "backboard_assistant_id": "string|null",
   "created_at": "datetime",
   "updated_at": "datetime"
 }

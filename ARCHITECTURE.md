@@ -59,7 +59,7 @@ The first provider boundary is implemented in `src/lib/ai/gemma-provider.ts` in 
 
 ### Backboard
 
-Backboard stores persistent AI memory for the group. It should contain high-level, durable information such as:
+Backboard stores confirmed, high-level group memory, with one assistant per group because assistant memory is shared across its threads. Use explicit memory operations and read-only retrieval; do not let it auto-promote speculative Gemma output. MongoDB stores the Backboard assistant/memory IDs and evidence provenance. It should contain:
 
 - people and relationships
 - recurring references
@@ -70,6 +70,8 @@ Backboard stores persistent AI memory for the group. It should contain high-leve
 - higher-level memory context relevant to future reconstruction
 
 Backboard complements MongoDB and does not replace canonical application state.
+
+Backboard must not contain raw media, private fragments, or unconfirmed moment candidates. Memory writes happen after member confirmation/correction, and group deletion/correction workflows must remove/update the corresponding provider memory.
 
 ### MongoDB Atlas
 
@@ -109,9 +111,13 @@ Render hosts the deployment. The initial deployment should be simple and focused
 
 Only add more services if the architecture truly requires them.
 
+### ElevenLabs
+
+ElevenLabs Scribe is an optional external speech-to-text provider for voice-note fragments only. Calls are server-side and require explicit author opt-in. The transcript is a derived observation linked to the original audio and must be reviewed before group use. If privacy/retention terms or credits are unsuitable, the feature remains disabled; the core product continues on local Gemma.
+
 ### Tinker
 
-Tinker is not part of the initial MVP. It is reserved for later specialization only when there is a clear, measured model weakness that can be improved with targeted training.
+Tinker is used in a bounded offline specialization experiment after baseline evaluation identifies a concrete weakness. It is not the default runtime model. Supported base-model compatibility, checkpoint sampling, billing, and data handling must be verified against the current Tinker catalog before the experiment. Only synthetic or explicitly de-identified/consented examples may be used.
 
 ## Data ownership
 
@@ -120,6 +126,8 @@ The system should separate responsibilities clearly:
 - MongoDB: application truth and operational records
 - Tiger Data: retrieval index and time-aware search layer
 - Backboard: persistent memory and contextual recall
+- ElevenLabs: opt-in voice-note transcription only
+- Tinker: isolated, measured model-specialization experiment
 - Gemma: reasoning over selected candidate context
 - Render: deployment/runtime operations
 
