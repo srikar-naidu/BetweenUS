@@ -36,6 +36,20 @@ export function membershipAllows(
   return !allowedRoles || allowedRoles.includes(membership.role as GroupRole);
 }
 
+export function groupSummaryForMember(
+  group: Record<string, unknown>,
+  memberRole: GroupRole,
+) {
+  const id = normalizeId(group._id as string | ObjectId);
+  return {
+    id,
+    name: typeof group.name === "string" ? group.name : "Private group",
+    slug: typeof group.slug === "string" ? group.slug : id,
+    description: typeof group.description === "string" ? group.description : null,
+    memberRole,
+  };
+}
+
 export async function listGroupsForUser(headers: Headers) {
   const auth = await getAuth();
   const session = await auth.api.getSession({ headers });
@@ -60,16 +74,9 @@ export async function listGroupsForUser(headers: Headers) {
     .find({ _id: { $in: groupIds }, lifecycleStatus: "active" })
     .sort({ name: 1 })
     .toArray();
-  return groups.map((group) => {
-    const id = normalizeId(group._id as string | ObjectId);
-    return {
-      id,
-      name: typeof group.name === "string" ? group.name : "Private group",
-      slug: typeof group.slug === "string" ? group.slug : id,
-      description: typeof group.description === "string" ? group.description : null,
-      memberRole: roleByGroup.get(id) ?? "member",
-    };
-  });
+  return groups.map((group) =>
+    groupSummaryForMember(group, roleByGroup.get(normalizeId(group._id as string | ObjectId)) ?? "member"),
+  );
 }
 
 export async function requireGroupMembership(
