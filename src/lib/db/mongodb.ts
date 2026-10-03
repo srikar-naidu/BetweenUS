@@ -1,4 +1,3 @@
-import { setServers } from "node:dns";
 import { Db, MongoClient } from "mongodb";
 
 interface MongoCache {
@@ -18,7 +17,6 @@ export function getMongoClient(): MongoClient {
     throw new Error("MONGODB_URI is required to access canonical memory data");
   }
 
-  setServers(["8.8.8.8", "1.1.1.1"]);
   cache.client ??= new MongoClient(uri);
   return cache.client;
 }
