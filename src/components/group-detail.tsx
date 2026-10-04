@@ -34,6 +34,42 @@ function contributorTone(authorUserId: string): string {
   return `tone-${hash % 5 + 1}`;
 }
 
+function GroupPhoto({
+  groupId,
+  fragmentId,
+  alt,
+  className,
+}: {
+  groupId: string;
+  fragmentId: string;
+  alt: string;
+  className?: string;
+}) {
+  const [unavailable, setUnavailable] = useState(false);
+  const src = `/api/groups/${encodeURIComponent(groupId)}/fragments/${encodeURIComponent(fragmentId)}/media`;
+  if (unavailable) {
+    return (
+      <div className={`group-photo-fallback ${className ?? ""}`} role="status">
+        <strong>Photo preview unavailable</strong>
+        <span>Reload the page to try loading this private photo again.</span>
+      </div>
+    );
+  }
+  return (
+    <Image
+      className={className}
+      src={src}
+      alt={alt}
+      width={960}
+      height={720}
+      unoptimized
+      loading="lazy"
+      decoding="async"
+      onError={() => setUnavailable(true)}
+    />
+  );
+}
+
 function fragmentFailureMessage(errorCategory?: string): string {
   if (errorCategory === "gemma_runtime_unavailable") {
     return "Gemma could not be reached. Check that Ollama is running, the configured model is installed, and the background worker can reach Ollama.";
@@ -389,6 +425,14 @@ export function GroupDetail({
     status: string;
   }>>([]);
   const fragmentsById = new Map(fragments.map((fragment) => [fragment.id, fragment]));
+  const reconstructableFragments = fragments.filter((fragment) =>
+    fragment.visibility === "group" &&
+    fragment.aiProcessingConsent &&
+    (fragment.status === "processed" || fragment.status === "needs_review") &&
+    ((fragment.type === "image" || fragment.type === "video")
+      ? fragment.mediaStorageAvailable === true
+      : hasApprovedTextSource(fragment)),
+  );
   const contributorLabels = new Map(
     [...new Set(fragments.map((fragment) => fragment.authorUserId))]
       .map((authorUserId, index) => [authorUserId, `Contributor ${index + 1}`]),
@@ -779,12 +823,10 @@ export function GroupDetail({
   return (
     <main className="shell trust-page group-page" id="main-content">
       <a className="skip-link" href="#group-content">Skip to group timeline</a>
-      <header className="topbar">
-        <Link className="wordmark" href="/">between us<span>.</span></Link>
-        <nav className="top-actions" aria-label="Group navigation">
-          <Link href="#add-fragment">Add a memory <span aria-hidden="true">+</span></Link>
-        </nav>
-      </header>
+      <div className="group-local-actions">
+        <span className="eyebrow">A SHARED SPACE</span>
+        <Link className="primary-button" href="#add-fragment">Post a memory <span aria-hidden="true">+</span></Link>
+      </div>
       <section className="intro">
         <p className="eyebrow"><span className="eyebrow-mark" />PRIVATE GROUP / MEMORY ATLAS</p>
         <h1>{groupName}</h1>
@@ -862,13 +904,10 @@ export function GroupDetail({
                     fragment.mediaStorageAvailable &&
                     fragment.type === "image" && (
                     <div className="group-media-preview">
-                      <Image
-                        src={`/api/groups/${groupId}/fragments/${fragment.id}/media`}
+                      <GroupPhoto
+                        groupId={groupId}
+                        fragmentId={fragment.id}
                         alt={fragment.caption || "Photo shared to this group"}
-                        width={960}
-                        height={720}
-                        unoptimized
-                        loading="lazy"
                       />
                     </div>
                   )}
@@ -1117,6 +1156,14 @@ export function GroupDetail({
                             {source ? formatCaptureTime(source.capturedAt) : "Source unavailable"}
                           </span>
                           <p>{source?.textContent ?? source?.caption ?? "Evidence is not visible to this member"}</p>
+                          {source?.type === "image" && source.mediaStorageAvailable && (
+                            <GroupPhoto
+                              className="moment-evidence-photo"
+                              groupId={groupId}
+                              fragmentId={source.id}
+                              alt={source.caption || `Photo evidence ${index + 1} for this moment`}
+                            />
+                          )}
                           {source && (
                             <span className={`contributor-label ${contributorTone(source.authorUserId)}`}>
                               <span aria-hidden="true" />{contributorLabels.get(source.authorUserId) ?? "Group member"}
@@ -1195,7 +1242,20 @@ export function GroupDetail({
                 />
               </article>
             ))}
-            {!moments.length && <p className="empty-moment">No reconstructed moments are ready yet.</p>}
+            {!moments.length && (
+              <div className="moment-start-card">
+                <span className="moment-start-number">01</span>
+                <div>
+                  <h3>No moments yet</h3>
+                  <p>
+                    {reconstructableFragments.length
+                      ? `${reconstructableFragments.length} fragment${reconstructableFragments.length === 1 ? " is" : "s are"} ready. Ask Gemma to connect the clues, then review the suggestion before it becomes a shared Moment.`
+                      : "Share a fragment with the group and allow Gemma to analyze it. Once processing is ready, request a reconstruction from that fragment."}
+                  </p>
+                  <a className="secondary-button" href="#fragments">Review fragments <span aria-hidden="true">↗</span></a>
+                </div>
+              </div>
+            )}
           </div>
           <div className="moment-panel" id="stories">
             <div className="section-head">

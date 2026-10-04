@@ -2,7 +2,7 @@ import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
 import { organization } from "better-auth/plugins";
 import type { Db } from "mongodb";
-import { getMongoClient } from "@/lib/db/mongodb";
+import { getMongoClient, getMongoDatabase } from "@/lib/db/mongodb";
 
 type AuthInstance = Awaited<ReturnType<typeof createAuth>>;
 
@@ -124,15 +124,21 @@ export async function getAuth(): Promise<AuthInstance> {
     );
   }
 
-  cache.pending ??= createAuth();
-  cache.instance = await cache.pending;
-  return cache.instance;
+  if (!cache.pending) cache.pending = createAuth();
+  const pending = cache.pending;
+  try {
+    const instance = await pending;
+    cache.instance = instance;
+    return instance;
+  } catch (error) {
+    if (cache.pending === pending) cache.pending = undefined;
+    throw error;
+  }
 }
 
 async function createAuth() {
+  const database = await getMongoDatabase();
   const client = getMongoClient();
-  await client.connect();
-  const database = client.db(process.env.MONGODB_DB_NAME ?? "between_us");
   await migratePluralizedOrganizationCollections(database);
 
   return betterAuth({

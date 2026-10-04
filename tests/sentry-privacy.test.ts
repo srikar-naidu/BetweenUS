@@ -18,7 +18,7 @@ test("Sentry error events retain only generic errors and approved categories", (
       headers: { authorization: "private-token" },
       data: { prompt: "private memory", audio: "private media" },
     },
-    user: { id: "private-user" },
+    user: { id: "private-user", ip_address: "2001:db8::1" },
     extra: { providerResponse: "private provider response" },
     contexts: { application: { content: "private fragment" } },
     breadcrumbs: [{ message: "private breadcrumb" }],

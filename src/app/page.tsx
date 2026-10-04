@@ -60,6 +60,51 @@ export default function Home() {
         initialMomentIsExample={reconstructedMoments.length === 0}
         enableLiveReconstruction={process.env.NODE_ENV === "development"}
       />
+      <section className="launch-film" aria-labelledby="launch-film-title">
+        <div className="launch-film-heading">
+          <div>
+            <p className="eyebrow">THE MOMENTS BETWEEN THE MOMENTS</p>
+            <h2 id="launch-film-title">A camera roll is only the beginning.</h2>
+            <p>
+              The photos are yours. The little details, shared with the people who were there,
+              help the whole afternoon come back.
+            </p>
+          </div>
+          <span className="launch-film-index">BETWEEN US / 01</span>
+        </div>
+        <div className="launch-film-layout">
+          <figure className="launch-film-player">
+            <div className="launch-film-video-frame">
+              <video
+                controls
+                playsInline
+                preload="metadata"
+                poster="/cafeteria-moment.svg"
+                aria-label="Between Us product film"
+              >
+                <source src="/video.mp4" type="video/mp4" />
+                Your browser does not support MP4 video.
+              </video>
+              <span className="launch-film-badge"><span aria-hidden="true">✳</span> A SHARED MEMORY, REASSEMBLED</span>
+            </div>
+            <figcaption>
+              <span>THE BETWEEN US FILM</span>
+              <span>20 SEC · SOUND ON</span>
+            </figcaption>
+          </figure>
+          <aside className="launch-film-notes" aria-label="How Between Us works">
+            <p className="eyebrow">MADE OF LITTLE THINGS</p>
+            <ol>
+              <li><span>01</span><div><strong>Everyone adds a clue</strong><p>A photo, voice note, video, or the detail only you remember.</p></div></li>
+              <li><span>02</span><div><strong>Gemma finds the overlap</strong><p>AI offers a grounded Moment for your group to review.</p></div></li>
+              <li><span>03</span><div><strong>You decide what it means</strong><p>Your people confirm it, correct it, and tell the story together.</p></div></li>
+            </ol>
+            <Link className="primary-button link-button" href="/groups">
+              Make a memory space <span aria-hidden="true">↗</span>
+            </Link>
+          </aside>
+        </div>
+      </section>
       <footer className="footer-note">
         <span>BETWEEN US <span aria-hidden="true">✳</span></span>
         <span>Little clues. A fuller story. Yours to decide.</span>
