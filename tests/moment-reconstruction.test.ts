@@ -21,9 +21,15 @@ function contextFragment(input: {
     captured_at: new Date(Date.parse("2026-10-04T12:00:00Z") + input.minutes * 60_000).toISOString(),
     summary: input.summary ?? "coffee at the cafeteria",
     entities: input.entities ?? ["cafeteria", "coffee"],
-    facts: input.facts ?? [{ type: "place", value: "cafeteria", evidence: "at the cafeteria" }],
+    facts: input.facts ?? [{
+      type: "place",
+      value: "cafeteria",
+      evidence: "at the cafeteria",
+      source: "text",
+    }],
     retrieval_score: 10,
     matched_signals: ["temporal", "entity_overlap"],
+    source_type: "text",
   };
 }
 
@@ -90,7 +96,7 @@ test("moment reconstruction rejects invented IDs and unsupported relationship cl
       id: "fragment-b",
       author: "author-b",
       minutes: 5,
-      facts: [{ type: "activity", value: "practice", evidence: "after practice" }],
+      facts: [{ type: "activity", value: "practice", evidence: "after practice", source: "text" }],
       entities: ["practice"],
     }),
   ]);

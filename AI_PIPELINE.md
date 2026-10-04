@@ -25,15 +25,15 @@ Text capture -> validate -> Mongo Fragment/ProcessingJob
   -> member confirm/reject/correct -> evaluation example -> gated Tinker study
 ```
 
-This is the intended architecture, not a claim that every integration is currently active. The current app accepts text fragments only; media upload/retrieval and object storage have been removed. Consent-gated text analysis, private-by-default access boundaries, a local Gemma demo, and Temporal worker processing are implemented.
+This is the intended architecture, not a claim that every integration is currently active. The current app accepts text and short, private WAV voice notes. Voice audio is stored in MongoDB GridFS; video, image, and third-party object-storage integrations remain disabled. Consent-gated text analysis, private-by-default access boundaries, and Temporal worker processing are implemented.
 
 ## 1. Ingestion and provenance
 
-The authenticated API binds each text submission to the current user and requested group. It validates text length, capture timestamp/timezone, visibility, and consent. It creates a stable idempotency key, Mongo Fragment, and ProcessingJob.
+The authenticated API binds each submission to the current user and requested group. Text submissions validate length, capture timestamp/timezone, visibility, and consent. Voice submissions validate WAV PCM format, actual duration, size, capture timestamp/timezone, and a separate provider-specific consent. Voice uploads are private and AI-disabled until the author approves the transcript.
 
-MongoDB stores the canonical text Fragment fields: author, group, source, capture time and timezone, visibility, AI consent, processing version/status, and deletion state. New fragments remain private and AI processing stays off unless the member explicitly opts in. The `fragment_analyses` collection stores the analysis contract/version, configured Gemma model tag, a checksum of the source text, and quoted source evidence. Legacy media metadata may remain in MongoDB, but source bytes are unavailable through the app.
+MongoDB stores canonical Fragment fields: author, group, source, capture time and timezone, visibility, AI and external-transcription consent, processing version/status, and deletion state. `voice_notes` GridFS stores the bounded private audio object; `voice_transcripts` stores author-only transcript review state and word offsets. New fragments remain private and AI processing stays off unless the member explicitly opts in. The `fragment_analyses` collection stores the analysis contract/version, configured Gemma model tag, a checksum of the source text or author-approved transcript, and quoted source evidence.
 
-Media upload and retrieval are disabled. Any pre-existing objects in a former bucket require manual cleanup; text processing uses MongoDB and Temporal only.
+ElevenLabs is disabled by default and requires an API key plus non-zero, bounded monthly seconds and request caps. Only the selected WAV file is sent. The author must explicitly consent, then review/edit the returned transcript before group visibility or local AI processing. No provider retry is automatic, avoiding duplicate charges. Other media types remain disabled. Any pre-existing objects in a former bucket require manual cleanup.
 
 ## 2. Observation: Gemma sees
 
@@ -44,9 +44,9 @@ For an active text fragment with explicit AI consent, a worker calls local Gemma
 - per-fact and overall model confidence signals, with `possible` or `unknown` status only;
 - source ID, analysis version, configured model tag, and checksum provenance.
 
-The current feature does not analyze media. If media is reintroduced under a separate storage decision, video analysis must inspect only a documented short-video keyframe sample; it must never pass an archive or every frame. Do not identify a person by face. Malformed or unsupported output is rejected and retried, not persisted as fact.
+Raw media analysis remains disabled. Video analysis, if separately approved, must inspect only a documented short-video keyframe sample; it must never pass an archive or every frame. Do not identify a person by face. Malformed or unsupported output is rejected and retried, not persisted as fact.
 
-For opted-in voice notes, a separate activity may send only the source audio and minimum options to ElevenLabs STT after account terms/retention and spend/consent gates pass. Store transcript, speaker labels, and word timestamps as derived evidence linked to the audio. Speaker labels are local transcript labels, not identity. The author reviews transcript content before group retrieval. Until that gate passes, voice processing remains disabled.
+For opted-in voice notes, a separate Temporal activity sends only the selected source audio and minimum options to ElevenLabs Scribe after account terms/retention and usage-cap gates pass. Store the transcript and word timestamps as derived evidence linked to the audio. Speaker diarization is off. The author reviews/edits transcript content before group retrieval; approved transcript quotes remain labeled as transcript-derived evidence. If the provider is disabled or a budget is exhausted, keep the note private for manual transcription.
 
 ## 3. Structured memory and retrieval
 

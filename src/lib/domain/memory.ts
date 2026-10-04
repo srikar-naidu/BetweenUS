@@ -91,10 +91,36 @@ export interface Fragment {
   aiProcessingConsent: boolean;
   aiProcessingConsentAt: Date | null;
   aiProcessingConsentRevokedAt: Date | null;
+  transcriptionConsent?: boolean;
+  transcriptionConsentAt?: Date | null;
+  transcriptionConsentRevokedAt?: Date | null;
+  transcriptReviewedAt?: Date | null;
   deletionState: FragmentDeletionState;
   deletionRequestedAt: Date | null;
   deletionRequestedByUserId: string | null;
   status: FragmentStatus;
+}
+
+export function hasApprovedTextSource(
+  fragment: {
+    type: Fragment["type"];
+    source: Fragment["source"];
+    textContent: string | null;
+    transcriptReviewedAt?: Date | string | null;
+  },
+): boolean {
+  if (fragment.type === "text" && fragment.source === "text") {
+    return typeof fragment.textContent === "string" && fragment.textContent.trim().length > 0;
+  }
+  const reviewed = fragment.transcriptReviewedAt instanceof Date
+    ? Number.isFinite(fragment.transcriptReviewedAt.getTime())
+    : typeof fragment.transcriptReviewedAt === "string" &&
+      Number.isFinite(Date.parse(fragment.transcriptReviewedAt));
+  return fragment.type === "voice" &&
+    fragment.source === "upload" &&
+    reviewed &&
+    typeof fragment.textContent === "string" &&
+    fragment.textContent.trim().length > 0;
 }
 
 export interface NewFragment {
@@ -113,6 +139,7 @@ export interface NewFragment {
   metadata?: FragmentMetadata;
   visibility?: FragmentVisibility;
   aiProcessingConsent?: boolean;
+  transcriptionConsent?: boolean;
 }
 
 export interface MomentEvidence {

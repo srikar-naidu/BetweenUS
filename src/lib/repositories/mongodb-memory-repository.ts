@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { ObjectId } from "mongodb";
 import type { Collection, Db, Filter } from "mongodb";
+import type { ClientSession } from "mongodb";
 import type {
   Fragment,
   Moment,
@@ -92,6 +93,10 @@ export class MongoMemoryRepository {
       aiProcessingConsent,
       aiProcessingConsentAt: aiProcessingConsent ? now : null,
       aiProcessingConsentRevokedAt: null,
+      transcriptionConsent: input.transcriptionConsent === true,
+      transcriptionConsentAt: input.transcriptionConsent === true ? now : null,
+      transcriptionConsentRevokedAt: null,
+      transcriptReviewedAt: null,
       deletionState: "active",
       deletionRequestedAt: null,
       deletionRequestedByUserId: null,
@@ -150,11 +155,13 @@ export class MongoMemoryRepository {
     const documents = await this.fragments.find({
       _id: { $in: [...fragmentIds] },
       groupId,
-      type: "text",
-      source: "text",
       visibility: "group",
       aiProcessingConsent: true,
       deletionState: "active",
+      $or: [
+        { type: "text", source: "text" },
+        { type: "voice", source: "upload", transcriptReviewedAt: { $type: "date" } },
+      ],
     }).toArray();
     return documents.map(asFragment);
   }
@@ -170,6 +177,49 @@ export class MongoMemoryRepository {
     );
   }
 
+  async reviewVoiceTranscript(input: {
+    groupId: string;
+    fragmentId: string;
+    authorUserId: string;
+    transcript: string;
+    visibility: Fragment["visibility"];
+    aiProcessingConsent: boolean;
+    processingVersion: string;
+  }, session?: ClientSession): Promise<Fragment | null> {
+    const now = new Date();
+    const result = await this.fragments.updateOne(
+      {
+        _id: input.fragmentId,
+        groupId: input.groupId,
+        authorUserId: input.authorUserId,
+        type: "voice",
+        source: "upload",
+        deletionState: "active",
+      },
+      {
+        $set: {
+          textContent: input.transcript,
+          visibility: input.visibility,
+          aiProcessingConsent: input.aiProcessingConsent,
+          aiProcessingConsentAt: input.aiProcessingConsent ? now : null,
+          aiProcessingConsentRevokedAt: null,
+          transcriptReviewedAt: now,
+          processingVersion: input.processingVersion,
+          updatedAt: now,
+        },
+      },
+      { session },
+    );
+    if (result.matchedCount !== 1) return null;
+    const document = await this.fragments.findOne({
+      _id: input.fragmentId,
+      groupId: input.groupId,
+      authorUserId: input.authorUserId,
+      deletionState: "active",
+    }, { session });
+    return document ? asFragment(document) : null;
+  }
+
   async findGroupVisibleFragments(
     groupId: string,
     startAt: Date,
@@ -181,6 +231,10 @@ export class MongoMemoryRepository {
       visibility: "group",
       aiProcessingConsent: true,
       deletionState: "active",
+      $or: [
+        { type: "text", source: "text" },
+        { type: "voice", source: "upload", transcriptReviewedAt: { $type: "date" } },
+      ],
       capturedAt: { $gte: startAt, $lte: endAt },
     };
     const documents = await this.fragments
@@ -297,6 +351,8 @@ export class MongoMemoryRepository {
         $set: {
           aiProcessingConsent: false,
           aiProcessingConsentRevokedAt: now,
+          transcriptionConsent: false,
+          transcriptionConsentRevokedAt: now,
           deletionState: "pending",
           deletionRequestedAt: now,
           deletionRequestedByUserId: input.actorUserId,
@@ -349,6 +405,8 @@ export class MongoMemoryRepository {
         $set: {
           aiProcessingConsent: false,
           aiProcessingConsentRevokedAt: now,
+          transcriptionConsent: false,
+          transcriptionConsentRevokedAt: now,
           deletionState: "pending",
           deletionRequestedAt: now,
           deletionRequestedByUserId: input.requestedByUserId,

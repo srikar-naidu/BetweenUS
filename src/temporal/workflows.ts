@@ -29,6 +29,44 @@ const reconstructionActivity = proxyActivities<typeof activities>({
   },
 });
 
+const transcriptionActivity = proxyActivities<typeof activities>({
+  startToCloseTimeout: "2 minutes",
+  retry: { maximumAttempts: 1 },
+});
+
+export async function transcribeVoiceWorkflow(input: FragmentWorkflowInput): Promise<void> {
+  const workflowId = workflowInfo().workflowId;
+  try {
+    await runActivity.markProcessingJobStarted({
+      jobId: input.jobId,
+      workflowId,
+      groupId: input.groupId,
+      fragmentId: input.fragmentId,
+      fragmentStatus: "processing",
+    });
+    await transcriptionActivity.transcribeVoiceNote({
+      groupId: input.groupId,
+      fragmentId: input.fragmentId,
+    });
+    await runActivity.markProcessingJobSucceeded({
+      jobId: input.jobId,
+      outputRef: input.fragmentId,
+      groupId: input.groupId,
+      fragmentId: input.fragmentId,
+      fragmentStatus: "processed",
+    });
+  } catch (error) {
+    await runActivity.markProcessingJobFailed({
+      jobId: input.jobId,
+      errorCategory: "voice_transcription_failed",
+      groupId: input.groupId,
+      fragmentId: input.fragmentId,
+      fragmentStatus: "rejected",
+    });
+    throw error;
+  }
+}
+
 export async function processFragmentWorkflow(input: FragmentWorkflowInput): Promise<void> {
   const workflowId = workflowInfo().workflowId;
   try {

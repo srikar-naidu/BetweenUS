@@ -3,9 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Fragment, MemberMoment, MomentCorrection } from "@/lib/domain/memory";
+import { hasApprovedTextSource } from "@/lib/domain/memory";
 import { formatCaptureTime } from "@/lib/domain/format-time";
 import { FragmentPrivacyControls } from "@/components/fragment-privacy-controls";
 import { FragmentComposer } from "@/components/fragment-composer";
+import { VoiceTranscriptReview } from "@/components/voice-transcript-review";
 
 export type GroupFragmentView = Omit<Fragment, "storageUri"> & {
   processingJobStatus: "queued" | "running" | "succeeded" | "failed" | "retrying" | null;
@@ -253,7 +255,7 @@ export function GroupDetail({
   const [momentJobs, setMomentJobs] = useState<Array<{ jobId: string; fragmentId: string }>>([]);
   const [reconstructionMessage, setReconstructionMessage] = useState<string | null>(null);
   const [legacyMediaCleanupRequired, setLegacyMediaCleanupRequired] = useState(
-    initialFragments.some((fragment) => fragment.source === "upload"),
+    initialFragments.some((fragment) => fragment.source === "upload" && fragment.type !== "voice"),
   );
   const [groupMemoryConfigured, setGroupMemoryConfigured] = useState(false);
   const [groupMemoryEnabled, setGroupMemoryEnabled] = useState(false);
@@ -579,9 +581,17 @@ export function GroupDetail({
                     <span>{fragment.type}</span>
                     <span>{fragment.visibility}</span>
                   </div>
-                  <p>{fragment.textContent ?? fragment.caption ?? "Media source is unavailable."}</p>
-                  {fragment.type === "text" &&
-                    fragment.source === "text" &&
+                  <p>{fragment.textContent ?? fragment.caption ?? (
+                    fragment.type === "voice" ? "Voice note — transcript is private until you approve it." : "Media source is unavailable."
+                  )}</p>
+                  {fragment.type === "voice" && fragment.source === "upload" && (
+                    <audio
+                      controls
+                      preload="none"
+                      src={`/api/groups/${groupId}/fragments/${fragment.id}/audio`}
+                    />
+                  )}
+                  {hasApprovedTextSource(fragment) &&
                     fragment.visibility === "group" &&
                     fragment.aiProcessingConsent &&
                     fragment.status === "processed" && (
@@ -604,18 +614,35 @@ export function GroupDetail({
                   {fragment.processingJobStatus && (
                     <p className="fragment-processing-status" role="status">Processing: {fragment.processingJobStatus}</p>
                   )}
-                  {fragment.processingJobStatus === "failed" && fragment.source !== "upload" && (
+                  {fragment.processingJobStatus === "failed" &&
+                    (fragment.source !== "upload" || fragment.type === "voice") && (
                     <button className="text-button" type="button" onClick={() => void retryProcessing(fragment)}>
                       Retry processing
                     </button>
                   )}
+                  {fragment.type === "voice" &&
+                    fragment.authorUserId === currentUserId &&
+                    !fragment.transcriptReviewedAt && (
+                    <VoiceTranscriptReview
+                      groupId={groupId}
+                      fragmentId={fragment.id}
+                      onApproved={(updated) => {
+                        setFragments((current) => current.map((item) =>
+                          item.id === updated.id ? updated : item,
+                        ));
+                      }}
+                    />
+                  )}
                   <FragmentPrivacyControls
                     groupId={groupId}
                     fragmentId={fragment.id}
-                    hasLegacyMedia={fragment.source === "upload"}
+                    hasLegacyMedia={fragment.source === "upload" && fragment.type !== "voice"}
                     initialVisibility={fragment.visibility}
                     initialConsent={fragment.aiProcessingConsent}
-                    canEditPrivacy={fragment.authorUserId === currentUserId}
+                    canEditPrivacy={
+                      fragment.authorUserId === currentUserId &&
+                      (fragment.type !== "voice" || Boolean(fragment.transcriptReviewedAt))
+                    }
                     canDelete={
                       fragment.authorUserId === currentUserId ||
                       ((memberRole === "owner" || memberRole === "admin") && fragment.visibility === "group")
@@ -639,7 +666,9 @@ export function GroupDetail({
                       }
                     }}
                     onDeleted={(fragmentId) => {
-                      if (fragments.some((item) => item.id === fragmentId && item.source === "upload")) {
+                      if (fragments.some((item) =>
+                        item.id === fragmentId && item.source === "upload" && item.type !== "voice",
+                      )) {
                         setLegacyMediaCleanupRequired(true);
                       }
                       setFragments((current) => current.filter((item) => item.id !== fragmentId));

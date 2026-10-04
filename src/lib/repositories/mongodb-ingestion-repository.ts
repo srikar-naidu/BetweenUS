@@ -8,7 +8,7 @@ export interface ProcessingJob {
   id: string;
   groupId: string;
   fragmentId: string;
-  jobType: "ingest" | "delete_fragment" | "reconstruct_moment";
+  jobType: "ingest" | "delete_fragment" | "reconstruct_moment" | "transcribe_voice";
   processingVersion: string;
   status: ProcessingJobStatus;
   attemptCount: number;
@@ -175,7 +175,7 @@ export class MongoIngestionRepository {
     return statuses;
   }
 
-  async findFragmentForCleanup(groupId: string, fragmentId: string): Promise<Pick<Fragment, "id" | "groupId" | "source" | "storageUri" | "deletionState"> | null> {
+  async findFragmentForCleanup(groupId: string, fragmentId: string): Promise<Pick<Fragment, "id" | "groupId" | "source" | "type" | "storageUri" | "deletionState"> | null> {
     const record = await this.fragments.findOne({
       _id: fragmentId,
       groupId,
@@ -186,19 +186,21 @@ export class MongoIngestionRepository {
       id: fragmentId,
       groupId,
       source: record.source === "upload" ? "upload" : "legacy",
+      type: record.type === "voice" ? "voice" : record.type,
       storageUri: typeof record.storageUri === "string" ? record.storageUri : null,
       deletionState: "pending",
     };
   }
 
-  async findPendingGroupFragments(groupId: string): Promise<Array<Pick<Fragment, "id" | "groupId" | "source" | "processingVersion" | "storageUri">>> {
+  async findPendingGroupFragments(groupId: string): Promise<Array<Pick<Fragment, "id" | "groupId" | "source" | "type" | "processingVersion" | "storageUri">>> {
     const records = await this.fragments.find({ groupId, deletionState: "pending" })
-      .project({ _id: 1, groupId: 1, source: 1, processingVersion: 1, storageUri: 1 })
+      .project({ _id: 1, groupId: 1, source: 1, type: 1, processingVersion: 1, storageUri: 1 })
       .toArray();
     return records.map((record) => ({
       id: String(record._id),
       groupId: String(record.groupId),
       source: record.source === "upload" ? "upload" : "legacy",
+      type: record.type === "voice" ? "voice" : record.type,
       processingVersion: typeof record.processingVersion === "string" ? record.processingVersion : "legacy",
       storageUri: typeof record.storageUri === "string" ? record.storageUri : null,
     }));
@@ -217,6 +219,10 @@ export class MongoIngestionRepository {
           metadata: {},
           checksumSha256: null,
           aiProcessingConsent: false,
+          transcriptionConsent: false,
+          transcriptionConsentAt: null,
+          transcriptionConsentRevokedAt: null,
+          transcriptReviewedAt: null,
           updatedAt: now,
         },
       },

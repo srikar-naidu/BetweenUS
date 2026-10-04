@@ -103,6 +103,10 @@ button { font: inherit; }
 .group-memory-settings .text-button { flex: 0 0 auto; }
 .moment-correction-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .moment-correction-row .text-button { font-size: 10px; }
+.voice-composer-form { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--rule); }
+.voice-transcript-review { margin: 12px 0; padding: 14px; background: var(--paper); border: 1px solid var(--rule); }
+.voice-transcript-review h3 { margin: 0 0 10px; font-size: 12px; }
+.group-fragment audio { display: block; width: min(100%, 420px); margin: 10px 0; }
 .group-moment { padding: 16px 0; border-bottom: 1px solid var(--rule); }
 .group-moment h3 { margin: 10px 0 6px; font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif; font-size: 22px; font-weight: 500; }
 .group-moment > p { font-size: 13px; line-height: 1.5; }

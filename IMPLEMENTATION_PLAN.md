@@ -102,7 +102,7 @@ The following exit-gate items remain unverified and must be completed by an oper
 - Record remaining credits, expiry, permitted use, rate limits, billing behavior, retention, and training terms for Backboard, Tinker, ElevenLabs, Temporal Cloud, and Sentry.
 - Verify Tinker's live supported-model catalog, Gemma compatibility, sampling/checkpoint options, and account billing; until then, Tinker remains disabled and no samples are sent.
 - Configure and test Google OAuth credentials and the `/api/auth/callback/google` callback; the repository's `.env.example` contains blank credential placeholders and does not prove configuration.
-- Media upload and object storage are disabled in the current implementation. Choose and review a provider before any future media feature is reintroduced.
+- Image/video upload and third-party object storage are disabled. Optional voice notes use private MongoDB GridFS under the separate Phase 6 design; any other media feature requires a new storage/privacy decision.
 - Confirm that no real personal media has already been sent to a third party. The repository cannot establish this historical fact.
 - Before enabling any billable call, implement its feature flag, usage logging, and an explicitly approved non-zero cap; until that approval, the authorized external spend ceiling is $0.
 
@@ -132,7 +132,7 @@ The project can continue on local Gemma and synthetic demo data while these acco
 
 ### Phase 2: Ingestion, storage, and processing jobs
 
-**Current implementation boundary:** Text-fragment creation and processing jobs are implemented. Media upload/retrieval and object storage are disabled; any legacy objects in a former bucket require manual cleanup.
+**Current implementation boundary:** Text-fragment creation and processing jobs are implemented. The optional Phase 6 voice lane stores bounded WAV clips in private MongoDB GridFS. Image/video upload, retrieval, and third-party object storage remain disabled; any legacy objects in a former bucket require manual cleanup.
 
 - Add text-fragment creation and capture-time/time-zone handling.
 - Store source, author, group, visibility, consent, capture time, and processing version.
@@ -140,14 +140,14 @@ The project can continue on local Gemma and synthetic demo data while these acco
 - Store only opaque Mongo fragment/job IDs and small status data in Temporal workflow history; activities fetch authorized text and context from their canonical stores. Activities persist sensitive outputs in MongoDB/Tiger and return opaque IDs/status, not extracted text, transcripts, prompts, or completions. Never place full ContextPackets in workflow inputs/results.
 - Mirror user-facing processing status, provider references, and final outputs into MongoDB. Do not run a second Mongo polling queue alongside Temporal.
 
-**Exit gate:** text fragments survive server restarts, duplicate job retries do not create duplicate fragments, and deletion marks dependent AI state stale. Reintroducing media requires a separately approved private-storage design and migration plan.
+**Exit gate:** text and voice fragments survive server restarts, duplicate job retries do not create duplicate fragments, and deletion marks dependent AI state stale and removes voice bytes/transcripts. Reintroducing image/video media requires a separately approved private-storage design and migration plan.
 
 ### Phase 3: Baseline intelligence and temporal/vector retrieval
 
-**Current implementation status:** Consent-gated text analysis now uses a validated, versioned Gemma contract. Analysis records include source quotes, source-text checksum, configured model tag, and analysis version. Only active, group-visible, AI-consented text is projected to Tiger; retrieval rechecks eligibility in MongoDB and ranks a bounded candidate set by time, lexical overlap, extracted-entity overlap, and indexed Moment links. Context packets are capped at 12 fragments and carry compact analysis excerpts, never the full source fragments.
+**Current implementation status:** Consent-gated text analysis now uses a validated, versioned Gemma contract. Author-approved voice transcripts use the same path with explicit transcript-source provenance. Analysis records include source quotes, source-text checksum, configured model tag, and analysis version. Only active, group-visible, AI-consented text or approved voice transcripts are projected to Tiger; retrieval rechecks eligibility in MongoDB and ranks a bounded candidate set by time, lexical overlap, extracted-entity overlap, and indexed Moment links. Context packets are capped at 12 fragments and carry compact analysis excerpts, never the full source fragments.
 
 - Keep the local Ollama Gemma provider as the default path; add fragment-analysis contracts and model/version tracking.
-- Keep media analysis deferred: uploads and object storage are disabled by Decision 16. Reintroducing images/video requires an approved storage design; video must then use a documented, small keyframe sample rather than whole archives.
+- Keep image/video analysis deferred: those uploads and third-party object storage remain disabled by Decision 16. Reintroducing images/video requires an approved storage design; video must then use a documented, small keyframe sample rather than whole archives. Approved voice transcripts are analyzed as text-derived evidence, never as raw-audio analysis.
 - Extract text observations as uncertain AI data with source-quoted evidence, candidate places/entities, and model/version provenance. Do not infer identity or treat extracted entities as confirmed aliases.
 - Run the same-event retrieval comparison on a labeled dataset before selecting an embedding model. No local Ollama service or labeled real-fragment dataset was available during this implementation, so vector embeddings remain unselected and retrieval keeps its no-vector fallback.
 - Write only active, group-visible, AI-consented fragment projections to Tiger Data. Current ranking uses time, lexical overlap, extracted-entity overlap, and indexed Moment links; confirmed alias ranking depends on the future confirmed-entity model.
@@ -157,7 +157,7 @@ The project can continue on local Gemma and synthetic demo data while these acco
 
 ### Phase 4: Moment reconstruction, evidence, and correction
 
-**Current implementation status:** The group page queues text-only reconstruction as an idempotent Temporal workflow from an eligible group-visible fragment. The worker rechecks active group membership, fetches an authorized bounded ContextPacket, and asks Gemma for a schema-constrained proposal; the server validates candidate IDs, quote provenance, and evidence relationships, then assigns uncertainty deterministically and persists provenance. The UI polls the job and presents its result. Members can confirm, reject, merge, correct or undo the latest correction, and remove evidence. Review events retain before/after snapshots; review writes use revision checks and candidate merges use a MongoDB transaction.
+**Current implementation status:** The group page queues reconstruction as an idempotent Temporal workflow from an eligible group-visible text fragment or author-approved voice transcript. The worker rechecks active group membership, fetches an authorized bounded ContextPacket, and asks Gemma for a schema-constrained proposal; the server validates candidate IDs, quote provenance, and evidence relationships, then assigns uncertainty deterministically and persists provenance. The UI polls the job and presents its result. Members can confirm, reject, merge, correct or undo the latest correction, and remove evidence. Review events retain before/after snapshots; review writes use revision checks and candidate merges use a MongoDB transaction.
 
 - Ask Gemma for schema-constrained candidate summaries, evidence links, contradictions, missing evidence, and uncertainty notes.
 - Validate IDs and permissions against MongoDB, not just model output. Validate relationship types using stored observations; reject unsupported links.
@@ -183,15 +183,19 @@ The project can continue on local Gemma and synthetic demo data while these acco
 
 ### Phase 6: Optional voice-note input through ElevenLabs
 
-- Add voice notes as an opt-in Fragment type. Keep voice disabled until the Phase 0 privacy/retention gate is approved.
-- Upload audio to Between Us storage first; queue transcription in the background. Send only that audio file and minimal required options to ElevenLabs Scribe via the server-side API.
-- Show the transcript to the author for review/correction before it becomes group-visible or is used for shared reconstruction.
-- Preserve the original audio as the evidence source, transcript text as a derived observation, and any word timestamps as source offsets.
-- Make clear that voice is being sent to a cloud processor; do not treat an API setting as zero retention unless the account is eligible for it.
-- Use a strict clip/duration cap and credit budget. If credits run out or consent is absent, keep the voice fragment private/unprocessed or offer manual transcription; never silently switch to a paid service.
+**Current implementation status:** WAV voice notes are uploaded into a private MongoDB GridFS bucket with actual format, duration, and size validation. The ElevenLabs integration remains disabled by default and requires provider-specific author consent plus bounded monthly seconds/request caps. Eligible clips are transcribed in a Temporal activity with automatic retries disabled. Transcript and word offsets remain author-only until the author edits/approves the transcript and chooses visibility and separate local-AI consent. Missing provider setup or exhausted usage leaves a private clip for manual transcription. Live terms, retention, credits, and account eligibility remain an operator gate.
+
+- Add voice as an opt-in Fragment type, while keeping provider transcription disabled until the Phase 0 privacy/retention gate is approved.
+- Upload audio to private MongoDB GridFS first; queue transcription in the background and send only that audio file plus minimal options to ElevenLabs Scribe.
+- Let the author review/correct the transcript before group visibility or shared reconstruction; keep author-review controls available for manual transcription.
+- Preserve the original audio as evidence, the approved transcript as derived text, and returned word timestamps as source offsets.
+- Disclose the cloud provider and do not assume zero retention unless account eligibility is confirmed.
+- Enforce a strict clip/duration cap and approved monthly seconds/request cap. If credits/configuration are unavailable or consent is absent, keep the voice fragment private for manual transcription; never silently switch to a paid service.
 - Do not add voice cloning or TTS to the MVP.
 
-**Exit gate:** author consent is recorded, transcription can be edited, the transcript remains linked to the source audio, and usage/credit exhaustion does not break other uploads.
+**Implementation note:** Current audio format is mono 16-bit PCM WAV at 16 kHz, maximum 60 seconds / 2 MB. Image/video upload remains disabled.
+
+**Exit gate:** implementation tests verify consent, transcript editing/review, source audio linkage/deletion, monthly usage bounds, and manual fallback. Live provider, account-retention, and credit behavior must still be verified before enabling the feature outside a development environment.
 
 ### Phase 7: Tinker specialization experiment
 

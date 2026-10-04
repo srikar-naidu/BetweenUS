@@ -9,6 +9,9 @@ import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-reposit
 import { indexEligibleFragmentAnalysis } from "@/lib/retrieval/index-fragment-analysis";
 import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
 import { deleteFragmentBackboardMemories } from "@/lib/pipeline/group-backboard-memory";
+import { MongoVoiceStorage } from "@/lib/repositories/mongodb-voice-storage";
+import { MongoVoiceRepository } from "@/lib/repositories/mongodb-voice-repository";
+import { hasApprovedTextSource } from "@/lib/domain/memory";
 
 export const runtime = "nodejs";
 
@@ -38,8 +41,15 @@ export async function PATCH(
     const database = await getMongoDatabase();
     const repository = new MongoMemoryRepository(database);
     const previous = await repository.findFragmentById(groupId, fragmentId);
-    if (!previous || previous.authorUserId !== session.user.id) {
+    if (
+      !previous ||
+      previous.deletionState !== "active" ||
+      previous.authorUserId !== session.user.id
+    ) {
       return Response.json({ error: "Fragment not found" }, { status: 404 });
+    }
+    if (previous.type === "voice" && !hasApprovedTextSource(previous)) {
+      return Response.json({ error: "Review the transcript before changing voice-note privacy settings" }, { status: 409 });
     }
     const visibility = input.visibility as "private" | "group" | "restricted";
     const aiProcessingConsent = input.aiProcessingConsent;
@@ -134,14 +144,20 @@ export async function DELETE(
       return Response.json({ error: "Fragment not found" }, { status: 404 });
     }
     await deleteFragmentBackboardMemories({ database, groupId, fragmentId });
-    const legacyMediaCleanupRequired = fragment.source === "upload" && fragment.storageUri !== null;
-    const requested = await repository.requestFragmentDeletion({
-      groupId,
-      fragmentId,
-      actorUserId: session.user.id,
-      canManageGroup,
-    });
+    const legacyMediaCleanupRequired =
+      fragment.source === "upload" && fragment.type !== "voice" && fragment.storageUri !== null;
+    const requested = fragment.deletionState === "pending" ||
+      await repository.requestFragmentDeletion({
+        groupId,
+        fragmentId,
+        actorUserId: session.user.id,
+        canManageGroup,
+      });
     if (!requested) return Response.json({ error: "Fragment not found" }, { status: 404 });
+    if (fragment.type === "voice" && fragment.storageUri) {
+      await new MongoVoiceStorage(database).delete(fragment.storageUri);
+      await new MongoVoiceRepository(database).deleteTranscript(groupId, fragmentId);
+    }
     if (process.env.TIGER_DATABASE_URL) {
       await new TigerDataFragmentSearch().removeGroupVisibleFragment(groupId, fragmentId);
     }

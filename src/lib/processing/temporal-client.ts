@@ -69,7 +69,7 @@ export async function getTemporalClient(): Promise<{ client: Client; settings: T
 
 export async function startFragmentWorkflow(
   job: ProcessingJob,
-  workflowType: "processFragmentWorkflow" | "deleteFragmentWorkflow",
+  workflowType: "processFragmentWorkflow" | "deleteFragmentWorkflow" | "transcribeVoiceWorkflow",
 ): Promise<string> {
   return startWorkflow(job, workflowType);
 }
@@ -86,7 +86,7 @@ export async function startMomentReconstructionWorkflow(
 
 async function startWorkflow(
   job: ProcessingJob,
-  workflowType: "processFragmentWorkflow" | "deleteFragmentWorkflow" | "reconstructMomentWorkflow",
+  workflowType: "processFragmentWorkflow" | "deleteFragmentWorkflow" | "reconstructMomentWorkflow" | "transcribeVoiceWorkflow",
   requesterUserId?: string,
 ): Promise<string> {
   const { client, settings } = await getTemporalClient();

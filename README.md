@@ -75,11 +75,13 @@ Run locally with `npm install`, then `npm run dev`. `npm test`, `npm run typeche
 
 ## Text fragments and processing worker
 
-The current app supports text fragments only. Media upload and retrieval endpoints have been removed, and no object-storage provider is required. Previously stored objects in any legacy bucket are not deleted by this app and must be cleaned up manually.
+The current app supports text fragments and short private WAV voice notes. Voice audio is stored in a private MongoDB GridFS bucket; image/video media and object-storage integrations remain disabled. Previously stored objects in any legacy bucket are not deleted by this app and must be cleaned up manually.
 
 Text-fragment analysis is off by default. A contributor must explicitly enable AI processing; only group-visible, consented analyses are indexed in Tiger. Local Gemma analysis and reconstruction run through a separate Temporal worker. For a local Temporal service, set `TEMPORAL_ADDRESS=localhost:7233`, `TEMPORAL_NAMESPACE=default`, and `TEMPORAL_TLS=false`; for Temporal Cloud, use its namespace endpoint/namespace, TLS, and `TEMPORAL_API_KEY`. Start the app with `npm run dev` and the worker in a separate terminal with `npm run worker`. Workflow history contains only opaque group, fragment, job, and requester IDs; workers recheck authorization and fetch authorized text-derived analyses from MongoDB.
 
 Text capture works without AI consent or Temporal. Consented analysis requires MongoDB, Temporal, the local Ollama model named by `GEMMA_MODEL`, and Tiger Data for group-visible projections. Do not put Temporal or model-service credentials in `NEXT_PUBLIC_` variables.
+
+Voice-note uploads require mono 16-bit PCM WAV at 16 kHz, up to 60 seconds/2 MB. They stay private until the author reviews/edits the transcript and separately chooses visibility and local-AI processing consent. Optional ElevenLabs transcription is off by default; check account retention/terms and explicitly approve usage caps before setting `ELEVENLABS_TRANSCRIPTION_ENABLED=true`, `ELEVENLABS_API_KEY`, `ELEVENLABS_MONTHLY_SECONDS`, and `ELEVENLABS_MONTHLY_REQUESTS`. Zero monthly caps keep transcription unavailable; provider/Temporal/credit unavailability leaves the clip for manual transcription.
 
 Members can request Moment reconstruction from an eligible group-visible text fragment. Gemma receives a bounded context packet; the server validates evidence and derives uncertainty, and group members can review candidates, correct or remove evidence, and confirm moments. Merge actions require MongoDB transaction support. Backboard memory is disabled by default: an owner/admin must enable it, and a member must explicitly share an individual correction on a confirmed Moment. Set `BACKBOARD_API_KEY` on the server; brief summaries/entities from eligible group-visible fragments may be sent as read-only search queries, but raw source text is not sent to Backboard. Disabling Backboard or deleting a group removes the group's Backboard assistant.
 
@@ -102,7 +104,7 @@ The product and architecture planning documents are:
 
 ## What is intentionally excluded from the first build
 
-The MVP does not include media uploads, public social features, comment systems, generic AI chat, or polished recap generation. The first build is scoped to proving that multiple users can contribute text fragments and that the system can identify likely shared moments with evidence-backed reasoning.
+The MVP does not include image/video uploads, public social features, comment systems, generic AI chat, or polished recap generation. Members can contribute text fragments and optional bounded WAV voice notes; voice transcription is a separate, disabled-by-default opt-in. The system identifies likely shared moments with evidence-backed reasoning.
 
 ## Definition of success
 

@@ -361,3 +361,29 @@ The active product uses text fragments only and has no requirement for a third-p
 ### Reason
 
 Keep the running product aligned with its current text-only capability and avoid carrying an unnecessary infrastructure dependency.
+
+## Decision 17: Add bounded voice notes in private MongoDB storage
+
+### Context
+
+Phase 6 adds an audio evidence source while preserving the no-third-party-object-storage decision. Transcription sends voice data to an external provider and carries separate retention and credit risks.
+
+### Chosen approach
+
+- Scope a narrow exception to Decision 16 for voice notes only; image/video uploads and third-party object storage remain disabled.
+- Store audio in MongoDB GridFS, behind authenticated group/fragment authorization, before any optional provider processing.
+- Accept only mono 16-bit PCM WAV at 16 kHz, with server-enforced 60-second and 2 MB limits.
+- Keep ElevenLabs disabled by default. Require explicit per-upload author consent and bounded monthly seconds/request caps before sending audio.
+- Keep the voice fragment private and local-AI-disabled until the author reviews/edits the transcript and separately approves its visibility and local-AI consent.
+- Preserve word offsets as derived transcript provenance. Do not enable diarization, voice cloning, or TTS.
+- Retain private audio for manual transcription when provider configuration or the usage budget is unavailable. Delete audio and transcript records when the fragment/group is deleted.
+- Verify provider-specific retention, terms, credits, and account eligibility before enabling the feature operationally.
+
+### Reason
+
+Support opted-in voice memories without introducing another storage provider or conflating general AI consent with permission to send audio to a cloud service.
+
+### Trade-offs
+
+- Pros: original audio remains linked to reviewed transcript evidence; provider use is bounded and off by default.
+- Cons: WAV-only input and MongoDB-backed media limit convenience; account-level retention and billing behavior remain operator gates.

@@ -7,6 +7,7 @@ import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-reposit
 import { MAX_CONTEXT_CANDIDATES } from "@/lib/retrieval/ranking";
 import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
 import { searchConfirmedGroupMemories } from "@/lib/pipeline/group-backboard-memory";
+import { hasApprovedTextSource } from "@/lib/domain/memory";
 
 export interface ContextPacketFragment {
   fragment_id: string;
@@ -14,9 +15,15 @@ export interface ContextPacketFragment {
   captured_at: string;
   summary: string;
   entities: string[];
-  facts: Array<{ type: string; value: string; evidence: string }>;
+  facts: Array<{
+    type: string;
+    value: string;
+    evidence: string;
+    source: "text" | "voice_transcript";
+  }>;
   retrieval_score: number;
   matched_signals: string[];
+  source_type: "text" | "voice";
 }
 
 export interface FragmentContextPacket {
@@ -58,8 +65,7 @@ export async function buildFragmentContextPacket(input: {
   if (
     !anchor ||
     anchor.deletionState !== "active" ||
-    anchor.type !== "text" ||
-    anchor.source !== "text" ||
+    !hasApprovedTextSource(anchor) ||
     anchor.visibility !== "group" ||
     !anchor.aiProcessingConsent ||
     !anchor.textContent
@@ -121,13 +127,15 @@ export async function buildFragmentContextPacket(input: {
     captured_at: fragment.capturedAt.toISOString(),
     summary: analysis.summary.slice(0, 500),
     entities: analysis.entities.slice(0, 20),
-    facts: analysis.observedFacts.slice(0, 8).map(({ type, value, evidence }) => ({
+    facts: analysis.observedFacts.slice(0, 8).map(({ type, value, evidence, source }) => ({
       type,
       value: value.slice(0, 240),
       evidence: evidence.slice(0, 240),
+      source,
     })),
     retrieval_score: retrievalScore,
     matched_signals: matchedSignals,
+    source_type: fragment.type === "voice" ? "voice" : "text",
   });
 
   const candidateFragments = [
@@ -138,8 +146,7 @@ export async function buildFragmentContextPacket(input: {
       if (
         !fragment ||
         !analysis ||
-        fragment.type !== "text" ||
-        fragment.source !== "text" ||
+        !hasApprovedTextSource(fragment) ||
         !fragment.textContent
       ) return [];
       const sourceChecksum = createHash("sha256").update(fragment.textContent).digest("hex");

@@ -9,6 +9,7 @@ import { TemporalConfigurationError, getTemporalClient, startMomentReconstructio
 import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-fragment-analysis-repository";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
+import { hasApprovedTextSource } from "@/lib/domain/memory";
 
 export const runtime = "nodejs";
 
@@ -45,8 +46,7 @@ export async function POST(
     const anchor = await memory.findFragmentVisibleToMember(groupId, anchorFragmentId, session.user.id);
     if (
       !anchor ||
-      anchor.type !== "text" ||
-      anchor.source !== "text" ||
+      !hasApprovedTextSource(anchor) ||
       anchor.visibility !== "group" ||
       !anchor.aiProcessingConsent ||
       anchor.deletionState !== "active" ||

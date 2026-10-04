@@ -10,6 +10,16 @@ import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-frag
 import { indexEligibleFragmentAnalysis } from "@/lib/retrieval/index-fragment-analysis";
 import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
 import { reconstructMoment } from "@/lib/pipeline/moment-reconstruction";
+import { hasApprovedTextSource } from "@/lib/domain/memory";
+import {
+  ElevenLabsApiError,
+  ElevenLabsClient,
+  ElevenLabsConfigurationError,
+  getElevenLabsTranscriptionSettings,
+} from "@/lib/integrations/elevenlabs-client";
+import { MAX_VOICE_FILE_BYTES, validateVoiceClip } from "@/lib/ingestion/voice-validation";
+import { MongoVoiceRepository } from "@/lib/repositories/mongodb-voice-repository";
+import { MongoVoiceStorage } from "@/lib/repositories/mongodb-voice-storage";
 
 export async function markProcessingJobStarted(input: {
   jobId: string;
@@ -36,8 +46,8 @@ export async function verifyIngestedFragment(input: { groupId: string; fragmentI
   if (!fragment || fragment.deletionState !== "active") {
     throw ApplicationFailure.nonRetryable("Fragment is unavailable for ingestion", "FragmentUnavailable");
   }
-  if (fragment.source !== "text" || fragment.type !== "text") {
-    throw ApplicationFailure.nonRetryable("Only text fragments are currently supported", "UnsupportedFragmentType");
+  if (!hasApprovedTextSource(fragment)) {
+    throw ApplicationFailure.nonRetryable("Fragment has no approved text source", "UnsupportedFragmentType");
   }
 }
 
@@ -51,8 +61,8 @@ export async function analyzeTextFragment(input: {
   if (!fragment || fragment.deletionState !== "active") {
     throw ApplicationFailure.nonRetryable("Fragment is unavailable for analysis", "FragmentUnavailable");
   }
-  if (fragment.source !== "text" || fragment.type !== "text") {
-    throw ApplicationFailure.nonRetryable("Only text fragments are currently supported", "UnsupportedFragmentType");
+  if (!hasApprovedTextSource(fragment)) {
+    throw ApplicationFailure.nonRetryable("Fragment has no approved text source", "UnsupportedFragmentType");
   }
   if (!fragment.aiProcessingConsent || !fragment.textContent) return null;
 
@@ -93,6 +103,92 @@ export async function analyzeTextFragment(input: {
     return null;
   }
   return analysis.id;
+}
+
+export async function transcribeVoiceNote(input: {
+  groupId: string;
+  fragmentId: string;
+}): Promise<void> {
+  const database = await getMongoDatabase();
+  const memory = new MongoMemoryRepository(database);
+  const voices = new MongoVoiceRepository(database);
+  const fragment = await memory.findFragmentById(input.groupId, input.fragmentId);
+  const transcript = await voices.findTranscript(input.groupId, input.fragmentId);
+  if (
+    !fragment ||
+    fragment.type !== "voice" ||
+    fragment.source !== "upload" ||
+    fragment.deletionState !== "active" ||
+    fragment.transcriptionConsent !== true ||
+    fragment.transcriptReviewedAt ||
+    !fragment.storageUri ||
+    transcript?.status !== "transcribing"
+  ) {
+    throw ApplicationFailure.nonRetryable("Voice note is no longer eligible for transcription", "VoiceNoteUnavailable");
+  }
+  const settings = getElevenLabsTranscriptionSettings();
+  if (!settings) {
+    await voices.markTranscriptFailed(input.groupId, input.fragmentId);
+    throw ApplicationFailure.nonRetryable("Voice transcription is disabled", "VoiceTranscriptionDisabled");
+  }
+
+  try {
+    const storage = new MongoVoiceStorage(database);
+    const bytes = await storage.load({
+      storageUri: fragment.storageUri,
+      groupId: input.groupId,
+      fragmentId: input.fragmentId,
+      authorUserId: fragment.authorUserId,
+      maximumBytes: MAX_VOICE_FILE_BYTES,
+    });
+    if (!bytes) {
+      throw ApplicationFailure.nonRetryable("Voice note audio is unavailable", "VoiceAudioUnavailable");
+    }
+    validateVoiceClip(bytes, "audio/wav");
+    const beforeProviderCall = await memory.findFragmentById(input.groupId, input.fragmentId);
+    if (
+      !beforeProviderCall ||
+      beforeProviderCall.deletionState !== "active" ||
+      beforeProviderCall.transcriptionConsent !== true ||
+      beforeProviderCall.storageUri !== fragment.storageUri
+    ) {
+      throw ApplicationFailure.nonRetryable("Voice note consent changed before transcription", "VoiceConsentChanged");
+    }
+    const result = await new ElevenLabsClient(settings).transcribe({ bytes });
+    const latest = await memory.findFragmentById(input.groupId, input.fragmentId);
+    const latestTranscript = await voices.findTranscript(input.groupId, input.fragmentId);
+    if (
+      !latest ||
+      latest.deletionState !== "active" ||
+      latest.transcriptionConsent !== true ||
+      latest.storageUri !== fragment.storageUri ||
+      latestTranscript?.status !== "transcribing"
+    ) {
+      throw ApplicationFailure.nonRetryable("Voice note consent changed during transcription", "VoiceConsentChanged");
+    }
+    const saved = await voices.saveTranscriptResult({
+      groupId: input.groupId,
+      fragmentId: input.fragmentId,
+      result,
+    });
+    if (!saved) {
+      throw ApplicationFailure.nonRetryable("Voice transcript could not be saved", "VoiceTranscriptUnavailable");
+    }
+  } catch (error) {
+    await voices.markTranscriptFailed(input.groupId, input.fragmentId);
+    if (error instanceof ApplicationFailure) throw error;
+    const category = error instanceof ElevenLabsApiError
+      ? "ElevenLabsApiError"
+      : error instanceof ElevenLabsConfigurationError
+        ? "ElevenLabsConfigurationError"
+        : error instanceof Error
+          ? error.name
+          : "VoiceTranscriptionError";
+    throw ApplicationFailure.nonRetryable(
+      `Voice transcription failed (${category})`,
+      "VoiceTranscriptionFailed",
+    );
+  }
 }
 
 export async function reconstructMomentForFragment(input: {
@@ -171,7 +267,10 @@ export async function deleteStoredFragment(input: { groupId: string; fragmentId:
   const repository = new MongoIngestionRepository(database);
   const fragment = await repository.findFragmentForCleanup(input.groupId, input.fragmentId);
   if (!fragment) return;
-  if (fragment.source === "upload" && fragment.storageUri) {
+  if (fragment.source === "upload" && fragment.type === "voice" && fragment.storageUri) {
+    await new MongoVoiceStorage(database).delete(fragment.storageUri);
+    await new MongoVoiceRepository(database).deleteTranscript(input.groupId, input.fragmentId);
+  } else if (fragment.source === "upload" && fragment.storageUri) {
     throw ApplicationFailure.nonRetryable(
       "Legacy media storage is unavailable; remove the object manually",
       "LegacyMediaCleanupRequired",

@@ -197,6 +197,15 @@ The numeric confidence remains a model/system signal, not a factual probability,
 - Persist external operation references and status in MongoDB. A pending operation is not a completed memory write.
 - Disabling the integration or deleting the group removes the group's assistant and stored memories. Fragment privacy/deletion changes remove linked provider memories before local eligibility changes.
 
+## Phase 6 voice transcript contract
+
+- Accept only mono 16-bit PCM WAV at 16 kHz; enforce a 60-second and 2 MB maximum from the actual file bytes.
+- Store source audio in private MongoDB GridFS before any provider call. Keep voice fragments private and local-AI-disabled until the author reviews/edits the transcript and explicitly approves visibility and local-AI consent.
+- External transcription requires separate author consent, the server feature flag, and remaining monthly seconds and request budget. Usage reservations are atomic per UTC month; no automatic provider retry.
+- Send only the selected audio file and minimal Scribe options to ElevenLabs. Persist returned word offsets against the source audio; speaker diarization is off.
+- Use approved transcript text as derived evidence linked to the original voice fragment. Never present transcript quotes as direct waveform evidence.
+- Delete GridFS source bytes and transcript metadata during fragment/group deletion. Provider or Temporal unavailability falls back to private manual transcription and does not affect text-fragment uploads.
+
 ## Phase 3 retrieval state
 
 The current no-vector reranker uses deterministic time, lexical, extracted-entity, and available Moment-link signals, with a maximum of 12 candidate fragments per ContextPacket. Extracted entity phrases are unconfirmed clues, not identity or alias proof. A small synthetic test fixture covers a near-time lexical distractor; selecting an embedding model and demonstrating retrieval gains on a labeled real-fragment set remain open evaluation gates.

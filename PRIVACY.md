@@ -16,7 +16,7 @@ Rules:
 
 ## Media visibility
 
-Media upload and retrieval are currently disabled. Existing media records may remain for compatibility, and any original files in a previously configured bucket require manual cleanup.
+Image/video upload and third-party object-storage retrieval are disabled. Optional voice notes are stored in a private MongoDB GridFS bucket and are available only through authenticated, group-scoped routes. Existing legacy media records may remain for compatibility, and any original files in a previously configured bucket require manual cleanup.
 
 The system must enforce:
 
@@ -104,10 +104,13 @@ If the system is uncertain whether a fragment should be used in a shared inferen
 ### ElevenLabs
 
 - Voice-note transcription is opt-in per author and disabled until provider retention, terms, credits, and account eligibility are reviewed.
-- Tell the uploader that audio leaves the local system for transcription. Send only the selected audio file, not a full ContextPacket or group history.
+- Store voice audio in a private, group/fragment-scoped MongoDB GridFS bucket before any provider call. Currently accept only mono 16-bit PCM WAV at 16 kHz, at most 60 seconds and 2 MB.
+- Tell the uploader that audio leaves Between Us for transcription. Record provider-specific consent separately from local AI consent. Send only the selected audio file, not a full ContextPacket or group history.
+- Keep the fragment private and AI-disabled until the author edits/approves the transcript and selects visibility and local-AI consent. Preserve word timestamps as offsets to the original audio.
+- Keep the feature off by default. Enable only with `ELEVENLABS_TRANSCRIPTION_ENABLED=true`, an API key, and approved non-zero `ELEVENLABS_MONTHLY_SECONDS` and `ELEVENLABS_MONTHLY_REQUESTS`; enforce the clip cap server-side. Reservations are stored per UTC month and are not refunded after provider outcomes become uncertain.
 - ElevenLabs documents zero-retention mode as enterprise-only; do not assume it is available on a free-credit account.
-- Show the transcript to the author for correction before it enters group-visible retrieval or reconstruction. Do not use voice cloning or TTS in the MVP.
-- If consent, quota, or provider availability is missing, keep voice processing disabled without affecting text-fragment capture.
+- Do not use voice cloning, speaker diarization, or TTS in the MVP. Do not automatically retry a failed external transcription.
+- If consent, quota, provider configuration, or Temporal is missing, retain the clip privately for manual transcription without blocking text-fragment capture.
 
 ### Tinker
 

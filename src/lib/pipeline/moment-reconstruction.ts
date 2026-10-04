@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Moment, MomentEvidence } from "@/lib/domain/memory";
+import { hasApprovedTextSource, type Moment, type MomentEvidence } from "@/lib/domain/memory";
 import { OllamaGemmaProvider, type StructuredGenerationInput } from "@/lib/ai/gemma-provider";
 import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
@@ -351,8 +351,7 @@ export async function reconstructMoment(input: {
   );
   if (
     !anchor ||
-    anchor.type !== "text" ||
-    anchor.source !== "text" ||
+    !hasApprovedTextSource(anchor) ||
     anchor.visibility !== "group" ||
     !anchor.aiProcessingConsent ||
     !anchor.textContent
@@ -381,6 +380,7 @@ export async function reconstructMoment(input: {
           "Return a candidate summary, not a confirmed fact.",
           "Cite only fragment IDs in candidate_fragments.",
           "Each evidence relationship must be directly supported by the supplied facts, entities, timestamps, or summaries.",
+          "Voice fragments contain author-reviewed transcripts linked to source audio. Treat their exact quotes as transcript text, not as speaker-identity proof; speaker labels are not identity.",
           "Use shared_people only for an exactly repeated literal person mention; do not infer that names refer to the same real person.",
           "Treat group_memories only as background context; they are not evidence for this event and must not be cited as fragment evidence.",
           "Every contradiction must cite exact evidence quotes present in the observations for each referenced fragment.",

@@ -99,6 +99,10 @@ Responsibilities:
   "ai_processing_consent": false,
   "ai_processing_consent_at": "datetime|null",
   "ai_processing_consent_revoked_at": "datetime|null",
+  "transcription_consent": false,
+  "transcription_consent_at": "datetime|null",
+  "transcription_consent_revoked_at": "datetime|null",
+  "transcript_reviewed_at": "datetime|null",
   "deletion_state": "active|pending|deleted",
   "deletion_requested_at": "datetime|null",
   "deletion_requested_by_user_id": "string|null",
@@ -112,6 +116,30 @@ Responsibilities:
 - raw user-uploaded content
 - canonical source evidence object
 - ownership and visibility handling
+- voice audio is kept in the private `voice_notes` GridFS bucket, not exposed as a client-facing storage URL
+- voice-specific transcription consent and transcript approval state remain linked to the original fragment
+
+## VoiceTranscript
+
+```json
+{
+  "group_id": "string",
+  "fragment_id": "string",
+  "author_user_id": "string",
+  "status": "manual_review|transcribing|pending_review|failed|reviewed",
+  "transcript": "string",
+  "words": [{ "text": "string", "start": 0.0, "end": 0.5, "speaker_id": null }],
+  "language_code": "string|null",
+  "updated_at": "datetime",
+  "reviewed_at": "datetime|null"
+}
+```
+
+Responsibilities:
+
+- author-only transcript and word offsets until the author reviews and approves them
+- separate workflow state from the canonical Fragment and raw GridFS bytes
+- delete transcript records when their fragment or group is deleted
 
 ## Moment
 

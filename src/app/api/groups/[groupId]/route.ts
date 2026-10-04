@@ -6,6 +6,8 @@ import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-reposit
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
 import { disableGroupBackboard } from "@/lib/pipeline/group-backboard-memory";
+import { MongoVoiceStorage } from "@/lib/repositories/mongodb-voice-storage";
+import { MongoVoiceRepository } from "@/lib/repositories/mongodb-voice-repository";
 
 export const runtime = "nodejs";
 
@@ -36,11 +38,16 @@ export async function DELETE(
     await new MongoFragmentAnalysisRepository(database).deleteGroup(groupId);
     const pendingFragments = await ingestionRepository.findPendingGroupFragments(groupId);
     const legacyMediaCleanupRequired = pendingFragments.some(
-      (fragment) => fragment.source === "upload" && fragment.storageUri !== null,
+      (fragment) => fragment.source === "upload" && fragment.type !== "voice" && fragment.storageUri !== null,
     );
     for (const fragment of pendingFragments) {
+      if (fragment.type === "voice" && fragment.storageUri) {
+        await new MongoVoiceStorage(database).delete(fragment.storageUri);
+        await new MongoVoiceRepository(database).deleteTranscript(groupId, fragment.id);
+      }
       await ingestionRepository.markFragmentDeletionComplete(groupId, fragment.id);
     }
+    await new MongoVoiceRepository(database).deleteGroupTranscripts(groupId);
     await ingestionRepository.completeGroupDeletionIfNoPendingFragments(groupId);
     return Response.json({ status: "deletion_pending", legacyMediaCleanupRequired }, { status: 202 });
   } catch (error) {

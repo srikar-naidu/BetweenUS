@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Db } from "mongodb";
+import { hasApprovedTextSource } from "@/lib/domain/memory";
 import type { FragmentAnalysis } from "@/lib/ai/fragment-analysis";
 import { fragmentAnalysisSearchText } from "@/lib/ai/fragment-analysis";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
@@ -13,8 +14,7 @@ export async function indexEligibleFragmentAnalysis(
   const fragment = await repository.findFragmentById(analysis.groupId, analysis.fragmentId);
   if (
     !fragment ||
-    fragment.source !== "text" ||
-    fragment.type !== "text" ||
+    !hasApprovedTextSource(fragment) ||
     fragment.deletionState !== "active" ||
     !fragment.aiProcessingConsent ||
     !fragment.textContent
@@ -42,8 +42,8 @@ export async function indexEligibleFragmentAnalysis(
 
   const current = await repository.findFragmentById(analysis.groupId, analysis.fragmentId);
   const remainsEligible =
-    current?.source === "text" &&
-    current.type === "text" &&
+    current !== null &&
+    hasApprovedTextSource(current) &&
     current.deletionState === "active" &&
     current.aiProcessingConsent &&
     current.visibility === "group" &&

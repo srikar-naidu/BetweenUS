@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { Fragment } from "@/lib/domain/memory";
+import { hasApprovedTextSource, type Fragment } from "@/lib/domain/memory";
 import {
   OllamaGemmaProvider,
   type StructuredGenerationInput,
@@ -14,7 +14,7 @@ export interface FragmentObservationFact {
   type: FragmentFactType;
   value: string;
   confidence: number;
-  source: "text";
+  source: "text" | "voice_transcript";
   evidence: string;
 }
 
@@ -62,7 +62,10 @@ function textArraySchema(maxItems: number) {
   };
 }
 
-export function fragmentAnalysisResponseSchema(fragmentId: string): Record<string, unknown> {
+export function fragmentAnalysisResponseSchema(
+  fragmentId: string,
+  evidenceSource: FragmentObservationFact["source"] = "text",
+): Record<string, unknown> {
   return {
     type: "object",
     properties: {
@@ -77,7 +80,7 @@ export function fragmentAnalysisResponseSchema(fragmentId: string): Record<strin
             type: { type: "string", enum: ["person", "place", "object", "activity", "tone", "reference"] },
             value: { type: "string", minLength: 1, maxLength: 240 },
             confidence: { type: "number", minimum: 0, maximum: 1 },
-            source: { type: "string", const: "text" },
+            source: { type: "string", const: evidenceSource },
             evidence: { type: "string", minLength: 1, maxLength: 240 },
           },
           required: ["type", "value", "confidence", "source", "evidence"],
@@ -157,6 +160,7 @@ export function validateFragmentAnalysisOutput(
   result: Record<string, unknown>,
   fragmentId: string,
   sourceText: string,
+  evidenceSource: FragmentObservationFact["source"] = "text",
 ): Omit<FragmentAnalysis, "id" | "groupId" | "authorUserId" | "modelVersion" | "sourceTextSha256" | "analyzedAt"> {
   if (result.fragment_id !== fragmentId) {
     throw new FragmentAnalysisValidationError("Gemma cited a different source fragment");
@@ -193,14 +197,14 @@ export function validateFragmentAnalysisOutput(
       throw new FragmentAnalysisValidationError("Gemma returned a fact value that is not supported by its evidence");
     }
     if (typeof fact.confidence !== "number" || !Number.isFinite(fact.confidence) ||
-        fact.confidence < 0 || fact.confidence > 1 || fact.source !== "text") {
+        fact.confidence < 0 || fact.confidence > 1 || fact.source !== evidenceSource) {
       throw new FragmentAnalysisValidationError("Gemma returned invalid fact provenance or confidence");
     }
     return {
       type: fact.type as FragmentFactType,
       value,
       confidence: fact.confidence,
-      source: "text",
+      source: evidenceSource,
       evidence,
     };
   });
@@ -256,8 +260,7 @@ export async function generateFragmentAnalysis(
   provider: FragmentAnalysisGenerator = new OllamaGemmaProvider(),
 ): Promise<FragmentAnalysis> {
   if (
-    fragment.type !== "text" ||
-    fragment.source !== "text" ||
+    !hasApprovedTextSource(fragment) ||
     typeof fragment.textContent !== "string" ||
     !fragment.textContent.trim()
   ) {
@@ -283,9 +286,13 @@ export async function generateFragmentAnalysis(
         "Use uncertainty status possible when there is extracted evidence, otherwise unknown. Never use likely or confirmed.",
       ],
     },
-    responseSchema: fragmentAnalysisResponseSchema(fragment.id),
+    responseSchema: fragmentAnalysisResponseSchema(
+      fragment.id,
+      fragment.type === "voice" ? "voice_transcript" : "text",
+    ),
   });
-  const validated = validateFragmentAnalysisOutput(result, fragment.id, fragment.textContent);
+  const evidenceSource = fragment.type === "voice" ? "voice_transcript" : "text";
+  const validated = validateFragmentAnalysisOutput(result, fragment.id, fragment.textContent, evidenceSource);
   return {
     ...validated,
     id: `${fragment.groupId}:${fragment.id}:${FRAGMENT_ANALYSIS_VERSION}`,
