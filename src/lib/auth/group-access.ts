@@ -97,9 +97,8 @@ export async function requireGroupMembership(
   }
 
   const database = await getMongoDatabase();
-  const groupObjectId = new ObjectId(groupId);
   const [group, membership] = await Promise.all([
-    database.collection("groups").findOne({ _id: { $in: mongoIdVariants(groupId) } }),
+    database.collection("groups").findOne({ _id: new ObjectId(groupId) }),
     database.collection<GroupMembershipIdentity>("group_members").findOne({
       organizationId: { $in: mongoIdVariants(groupId) },
       userId: { $in: mongoIdVariants(session.user.id) },

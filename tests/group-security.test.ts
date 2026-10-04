@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { groupSummaryForMember, membershipAllows } from "../src/lib/auth/group-access";
+import { groupSummaryForMember, membershipAllows, mongoIdVariants } from "../src/lib/auth/group-access";
 import { momentForGroupMember, visibleMomentsForMember } from "../src/lib/auth/group-visibility";
 import type { Fragment, Moment } from "../src/lib/domain/memory";
 
@@ -15,6 +15,15 @@ test("group membership is bound to both exact group and authenticated user", () 
   assert.equal(membershipAllows(member, "group-b", "user-a"), false);
   assert.equal(membershipAllows(member, "group-a", "user-b"), false);
   assert.equal(membershipAllows(null, "group-a", "user-a"), false);
+});
+
+test("Mongo group ID lookups match both ObjectId and string references", () => {
+  const id = "6ac21137d07284b3a39289b1";
+  const values = mongoIdVariants(id);
+  assert.equal(values.length, 2);
+  assert.equal(String(values[0]), id);
+  assert.equal(values[1], id);
+  assert.deepEqual(mongoIdVariants("provider-user-id"), ["provider-user-id"]);
 });
 
 test("member role cannot pass an owner/admin route gate", () => {
