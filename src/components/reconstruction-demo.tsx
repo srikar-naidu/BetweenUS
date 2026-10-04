@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Image from "next/image";
 import type { Fragment, Moment, MomentEvidence } from "@/lib/domain/memory";
 import { formatCaptureTime } from "@/lib/domain/format-time";
 import type { DemoFragment, DemoReconstructionResult } from "@/lib/pipeline/demo-reconstruction";
@@ -27,6 +28,13 @@ const contributorTones: Record<string, string> = {
   maya: "tone-1",
   arjun: "tone-2",
   leah: "tone-3",
+};
+
+const fragmentVisuals: Partial<Record<Fragment["type"], { src: string; alt: string }>> = {
+  image: { src: "/fragment-food.svg", alt: "Illustration of cafeteria fries and coffee" },
+  screenshot: { src: "/fragment-chat.svg", alt: "Illustration of a group chat message" },
+  video: { src: "/fragment-video.svg", alt: "Illustration of friends celebrating in a cafeteria" },
+  text: { src: "/fragment-note.svg", alt: "Illustration of a handwritten memory note" },
 };
 
 const relationshipLabels: Record<MomentEvidence["relationship"], string> = {
@@ -88,14 +96,28 @@ export function ReconstructionDemo({
           {fragments.map((fragment) => (
             <article className="fragment" key={fragment.id}>
               <time className="fragment-time">{formatCaptureTime(fragment.capturedAt)}</time>
-              <div>
-                <div className="fragment-meta">
-                  <span className="fragment-kind-chip">{fragmentKinds[fragment.type]}</span>
-                  <span className={`contributor-label ${contributorTones[fragment.authorUserId] ?? "tone-4"}`}>
-                    <span aria-hidden="true" />{names[fragment.authorUserId] ?? "Group member"}
-                  </span>
+              <div className="demo-fragment-content">
+                {fragmentVisuals[fragment.type] && (
+                  <div className={`demo-fragment-visual demo-fragment-visual--${fragment.type}`}>
+                    <Image
+                      src={fragmentVisuals[fragment.type]!.src}
+                      alt={fragmentVisuals[fragment.type]!.alt}
+                      width={180}
+                      height={132}
+                      sizes="(max-width: 700px) 28vw, (max-width: 900px) 120px, 180px"
+                    />
+                    {fragment.type === "video" && <span className="demo-fragment-play" aria-hidden="true">▶</span>}
+                  </div>
+                )}
+                <div className="demo-fragment-copy">
+                  <div className="fragment-meta">
+                    <span className="fragment-kind-chip">{fragmentKinds[fragment.type]}</span>
+                    <span className={`contributor-label ${contributorTones[fragment.authorUserId] ?? "tone-4"}`}>
+                      <span aria-hidden="true" />{names[fragment.authorUserId] ?? "Group member"}
+                    </span>
+                  </div>
+                  <p>{fragment.caption}</p>
                 </div>
-                <p>{fragment.caption}</p>
               </div>
             </article>
           ))}

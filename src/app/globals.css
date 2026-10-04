@@ -1285,10 +1285,52 @@ body {
   font-weight: 700;
   letter-spacing: .06em;
 }
+.demo-fragment-content {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(92px, 30%) minmax(0, 1fr);
+  align-items: center;
+  gap: 15px;
+}
+.demo-fragment-visual {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 180 / 132;
+  border: 2px solid var(--ink);
+  background: #dce6df;
+  box-shadow: 3px 3px 0 #9aac9f;
+}
+.demo-fragment-visual img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.demo-fragment-visual--image { transform: rotate(-1deg); }
+.demo-fragment-visual--screenshot { transform: rotate(1deg); }
+.demo-fragment-visual--video { transform: rotate(-.7deg); }
+.demo-fragment-visual--text { transform: rotate(.8deg); }
+.demo-fragment-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 2px solid var(--ink);
+  background: var(--paper-bright);
+  color: var(--ink);
+  font-size: 11px;
+  transform: translate(-50%, -50%);
+}
+.demo-fragment-copy { min-width: 0; }
+.demo-fragment-copy > p { overflow-wrap: anywhere; }
 
 @media (max-width: 900px) {
   .home-intro-grid { grid-template-columns: minmax(0, 1fr) minmax(290px, .9fr); gap: 30px; }
   .home-intro h1 { font-size: clamp(58px, 8.2vw, 82px); }
+  .demo-fragment-content { grid-template-columns: minmax(76px, 28%) minmax(0, 1fr); gap: 11px; }
 }
 @media (max-width: 700px) {
   .home-shell .top-actions a { min-height: 42px; padding-inline: 9px; font-size: 10px; }
@@ -1307,10 +1349,18 @@ body {
   .hero-memory-note--bottom { right: -3%; max-width: 70%; }
   .hero-visual-caption { margin-top: 13px; font-size: 10px; }
   .demo-heading h2 { font-size: clamp(28px, 8vw, 36px); }
+  .demo-fragment-content { grid-template-columns: minmax(82px, 29%) minmax(0, 1fr); gap: 12px; }
+  .demo-fragment-visual { box-shadow: 2px 2px 0 #9aac9f; }
+  .demo-fragment-visual--image, .demo-fragment-visual--screenshot,
+  .demo-fragment-visual--video, .demo-fragment-visual--text { transform: none; }
 }
 @media (max-width: 390px) {
   .home-intro .eyebrow { font-size: 8px; }
   .hero-memory-note { max-width: 68%; padding: 8px; }
   .hero-memory-note--bottom { max-width: 72%; }
   .hero-memory-note strong { font-size: 15px; }
+  .demo-fragment-content { grid-template-columns: minmax(68px, 27%) minmax(0, 1fr); gap: 9px; }
+  .demo-fragment-copy .fragment-meta { flex-wrap: wrap; gap: 5px; }
+  .demo-fragment-copy .contributor-label { font-size: 9px; }
+  .demo-fragment-copy > p { font-size: 12px; line-height: 1.45; }
 }
