@@ -107,11 +107,11 @@ test("moment evidence cannot cross group, visibility, consent, or deletion bound
           uncertaintyLabel: "possible",
           uncertaintyReason: "Needs review.",
           evidence: [],
-          corrections: [{ type: "place", fragmentId: "fragment-a", value: "North cafeteria" }],
+          corrections: [{ id: "correction-a", type: "place", fragmentId: "fragment-a", value: "North cafeteria" }],
           mergedIntoMomentId: null,
         },
       }],
-      corrections: [{ type: "place", fragmentId: "fragment-a", value: "North cafeteria" }],
+      corrections: [{ id: "correction-a", type: "place", fragmentId: "fragment-a", value: "North cafeteria" }],
       createdAt: new Date("2026-09-04T12:00:00Z"),
       updatedAt: new Date("2026-09-04T12:10:00Z"),
     };

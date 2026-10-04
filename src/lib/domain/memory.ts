@@ -16,6 +16,7 @@ export type UncertaintyLabel = "confirmed" | "likely" | "possible" | "unknown";
 export type MomentCorrectionType = "person" | "place" | "reference";
 
 export interface MomentCorrection {
+  id: string;
   type: MomentCorrectionType;
   fragmentId: string;
   value: string;
@@ -42,6 +43,7 @@ export interface MomentReviewEvent {
   details?: {
     correctionType?: MomentCorrectionType;
     fragmentId?: string;
+    correctionId?: string;
     value?: string;
     targetMomentId?: string;
     eventId?: string;

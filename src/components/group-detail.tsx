@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import type { Fragment, MemberMoment } from "@/lib/domain/memory";
+import type { Fragment, MemberMoment, MomentCorrection } from "@/lib/domain/memory";
 import { formatCaptureTime } from "@/lib/domain/format-time";
 import { FragmentPrivacyControls } from "@/components/fragment-privacy-controls";
 import { FragmentComposer } from "@/components/fragment-composer";
@@ -15,12 +15,18 @@ function MomentReviewControls({
   groupId,
   moment,
   otherMoments,
+  groupMemoryEnabled,
+  sharedCorrectionIds,
   onReview,
+  onMemoryChanged,
 }: {
   groupId: string;
   moment: MemberMoment;
   otherMoments: MemberMoment[];
-  onReview: (sourceMomentId: string, updatedMoment: MemberMoment) => void;
+  groupMemoryEnabled: boolean;
+  sharedCorrectionIds: ReadonlySet<string>;
+  onReview: (sourceMomentId: string, updatedMoment: MemberMoment, cleanupPending: boolean) => void;
+  onMemoryChanged: (momentId: string, correctionId: string, shared: boolean) => void;
 }) {
   const [correctionType, setCorrectionType] = useState<"person" | "place" | "reference">("reference");
   const [correctionValue, setCorrectionValue] = useState("");
@@ -39,15 +45,50 @@ function MomentReviewControls({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const result = await response.json() as { moment?: MemberMoment; error?: string };
+      const result = await response.json() as {
+        moment?: MemberMoment;
+        error?: string;
+        memoryCleanupPending?: boolean;
+      };
       if (!response.ok || !result.moment) {
         setMessage(result.error ?? "Could not save the moment review.");
         return;
       }
-      onReview(moment.id, result.moment);
-      setMessage("Moment review saved.");
+
+      onReview(moment.id, result.moment, result.memoryCleanupPending === true);
+      setMessage(result.memoryCleanupPending
+        ? "Moment review saved, but Backboard memory cleanup is still pending."
+        : "Moment review saved.");
     } catch {
       setMessage("Could not reach the moment review service.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function changeSharedMemory(correction: MomentCorrection, shared: boolean) {
+    if (!window.confirm(
+      shared
+        ? "Remove this correction from Backboard group memory? This also removes it from Backboard."
+        : "Share this correction with Backboard? Only this correction will be sent for group memory.",
+    )) return;
+    setPending(true);
+    setMessage(null);
+    try {
+      const response = await fetch(`/api/groups/${groupId}/memory/corrections`, {
+        method: shared ? "DELETE" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ momentId: moment.id, correctionId: correction.id }),
+      });
+      const result = await response.json() as { status?: string; error?: string };
+      if (!response.ok) {
+        setMessage(result.error ?? "Could not update Backboard group memory.");
+        return;
+      }
+      onMemoryChanged(moment.id, correction.id, !shared);
+      setMessage(shared ? "Correction removed from Backboard group memory." : "Correction shared to Backboard group memory.");
+    } catch {
+      setMessage("Could not reach the Backboard group memory service.");
     } finally {
       setPending(false);
     }
@@ -136,6 +177,26 @@ function MomentReviewControls({
           </button>
         </div>
       ))}
+      {moment.corrections?.map((correction) => (
+        <div key={correction.id} className="moment-correction-row">
+          <p className="moment-correction">Member correction ({correction.type}): {correction.value}</p>
+          {groupMemoryEnabled && moment.status === "confirmed" && (
+            <button
+              className="text-button"
+              type="button"
+              disabled={pending}
+              onClick={() => void changeSharedMemory(
+                correction,
+                sharedCorrectionIds.has(correction.id),
+              )}
+            >
+              {sharedCorrectionIds.has(correction.id)
+                ? "Remove from group memory"
+                : "Share to group memory"}
+            </button>
+          )}
+        </div>
+      ))}
       {isCandidate && otherMoments.length > 0 && (
         <div className="moment-merge">
           <label>
@@ -186,6 +247,7 @@ export function GroupDetail({
   const [fragments, setFragments] = useState(initialFragments);
   const [moments, setMoments] = useState(initialMoments);
   const [groupDeletionPending, setGroupDeletionPending] = useState(false);
+  const [groupDeletionRequesting, setGroupDeletionRequesting] = useState(false);
   const [groupDeletionMessage, setGroupDeletionMessage] = useState<string | null>(null);
   const [reconstructingFragmentId, setReconstructingFragmentId] = useState<string | null>(null);
   const [momentJobs, setMomentJobs] = useState<Array<{ jobId: string; fragmentId: string }>>([]);
@@ -193,7 +255,48 @@ export function GroupDetail({
   const [legacyMediaCleanupRequired, setLegacyMediaCleanupRequired] = useState(
     initialFragments.some((fragment) => fragment.source === "upload"),
   );
+  const [groupMemoryConfigured, setGroupMemoryConfigured] = useState(false);
+  const [groupMemoryEnabled, setGroupMemoryEnabled] = useState(false);
+  const [groupMemoryStatus, setGroupMemoryStatus] = useState("disabled");
+  const [groupMemoryLoading, setGroupMemoryLoading] = useState(true);
+  const [groupMemoryPending, setGroupMemoryPending] = useState(false);
+  const [groupMemoryMessage, setGroupMemoryMessage] = useState<string | null>(null);
+  const [sharedCorrections, setSharedCorrections] = useState<Array<{
+    momentId: string;
+    correctionId: string;
+    status: string;
+  }>>([]);
   const captionsById = new Map(fragments.map((fragment) => [fragment.id, fragment.caption]));
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetch(`/api/groups/${groupId}/memory`, { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("memory_status_unavailable");
+        return await response.json() as {
+          configured?: boolean;
+          enabled?: boolean;
+          status?: string;
+          sharedCorrections?: typeof sharedCorrections;
+        };
+      })
+      .then((result) => {
+        if (cancelled) return;
+        setGroupMemoryConfigured(result.configured === true);
+        setGroupMemoryEnabled(result.enabled === true);
+        setGroupMemoryStatus(result.status ?? "disabled");
+        setSharedCorrections(result.sharedCorrections ?? []);
+      })
+      .catch(() => {
+        if (!cancelled) setGroupMemoryMessage("Could not load the group memory settings.");
+      })
+      .finally(() => {
+        if (!cancelled) setGroupMemoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId]);
 
   useEffect(() => {
     const activeFragments = fragments.filter((fragment) =>
@@ -289,19 +392,31 @@ export function GroupDetail({
     };
   }, [groupId, momentJobs]);
 
-  function requestGroupDeletion() {
+  async function requestGroupDeletion() {
     if (!window.confirm("Mark this group for deletion and block further access?")) return;
-    void fetch(`/api/groups/${groupId}`, { method: "DELETE" }).then(async (response) => {
+    setGroupDeletionRequesting(true);
+    setGroupDeletionMessage(null);
+    try {
+      const response = await fetch(`/api/groups/${groupId}`, { method: "DELETE" });
+      const result = await response.json() as {
+        legacyMediaCleanupRequired?: boolean;
+        error?: string;
+      };
       if (response.status === 202) {
-        const result = await response.json() as { legacyMediaCleanupRequired?: boolean };
         setGroupDeletionMessage(
           result.legacyMediaCleanupRequired
             ? "Group access is disabled. Original media files from previous uploads still need manual cleanup from the former storage bucket."
             : "Group deletion is pending cleanup. Members can no longer access this space.",
         );
         setGroupDeletionPending(true);
+      } else {
+        setGroupDeletionMessage(result.error ?? "Could not prepare group deletion.");
       }
-    });
+    } catch {
+      setGroupDeletionMessage("Could not reach the group deletion service.");
+    } finally {
+      setGroupDeletionRequesting(false);
+    }
   }
 
   async function retryProcessing(fragment: GroupFragmentView) {
@@ -360,6 +475,73 @@ export function GroupDetail({
         ? [updatedMoment, ...remaining]
         : remaining;
     });
+  }
+
+  async function setGroupMemoryEnabledByAdmin(enabled: boolean) {
+    const confirmed = enabled
+      ? window.confirm(
+          "Enable Backboard group memory? Read-only searches send brief summaries and entities from group-visible, AI-consented fragments to Backboard. Only corrections a member explicitly shares are stored as memories.",
+        )
+      : window.confirm(
+          "Disable Backboard group memory and delete this group's Backboard assistant and stored memories?",
+        );
+    if (!confirmed) return;
+    setGroupMemoryPending(true);
+    setGroupMemoryMessage(null);
+    try {
+      const response = await fetch(`/api/groups/${groupId}/memory`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      const result = await response.json() as { status?: string; error?: string };
+      if (!response.ok) {
+        setGroupMemoryMessage(result.error ?? "Could not update group memory settings.");
+        try {
+          const statusResponse = await fetch(`/api/groups/${groupId}/memory`, { cache: "no-store" });
+          if (!statusResponse.ok) throw new Error("status_refresh_failed");
+          const latest = await statusResponse.json() as {
+            configured?: boolean;
+            enabled?: boolean;
+            status?: string;
+            sharedCorrections?: typeof sharedCorrections;
+          };
+          setGroupMemoryConfigured(latest.configured === true);
+          setGroupMemoryEnabled(latest.enabled === true);
+          setGroupMemoryStatus(latest.status ?? "disabled");
+          setSharedCorrections(latest.sharedCorrections ?? []);
+        } catch {
+          setGroupMemoryMessage((message) =>
+            `${message ?? "Could not update group memory settings."} Current status could not be refreshed.`,
+          );
+        }
+        return;
+      }
+      setGroupMemoryStatus(result.status ?? (enabled ? "enabled" : "disabled"));
+      setGroupMemoryEnabled(enabled && result.status !== "provisioning");
+      setGroupMemoryMessage(enabled
+        ? result.status === "already_enabled"
+          ? "Backboard group memory is already enabled."
+          : result.status === "provisioning"
+            ? "Backboard group memory setup is already in progress."
+            : "Backboard group memory enabled. Corrections are shared only when a member explicitly chooses to share them."
+        : "Backboard group memory disabled and provider data removed.");
+      if (!enabled) setSharedCorrections([]);
+    } catch {
+      setGroupMemoryMessage("Could not reach the Backboard group memory service.");
+    } finally {
+      setGroupMemoryPending(false);
+    }
+  }
+
+  function updateSharedCorrection(momentId: string, correctionId: string, shared: boolean) {
+    setSharedCorrections((current) => shared
+      ? [...current.filter((item) => item.correctionId !== correctionId), {
+          momentId,
+          correctionId,
+          status: "synced",
+        }]
+      : current.filter((item) => item.correctionId !== correctionId));
   }
 
   return (
@@ -473,6 +655,41 @@ export function GroupDetail({
           </div>
           <div className="moment-panel">
             <div className="section-head"><h2>Moments</h2><span>{moments.length} reconstructed</span></div>
+            <section className="group-memory-settings" aria-label="Group memory settings">
+              <div>
+                <strong>Backboard group memory</strong>
+                <p>
+                  When enabled, brief summaries and entities from group-visible, AI-consented fragments may be used as read-only search queries.
+                  Only a correction on a confirmed Moment is stored, and only after a member explicitly shares it.
+                  Disabling removes this group&apos;s Backboard assistant and its memories.
+                </p>
+                {groupMemoryMessage && <p className="privacy-status" role="status">{groupMemoryMessage}</p>}
+              </div>
+              {!groupMemoryLoading && (memberRole === "owner" || memberRole === "admin") && (
+                groupMemoryConfigured ? (
+                  <button
+                    className={groupMemoryEnabled || groupMemoryStatus === "disabling"
+                      ? "text-button danger-button"
+                      : "text-button"}
+                    type="button"
+                    disabled={groupMemoryPending || groupMemoryStatus === "creating"}
+                    onClick={() => void setGroupMemoryEnabledByAdmin(
+                      !groupMemoryEnabled && groupMemoryStatus !== "disabling",
+                    )}
+                  >
+                    {groupMemoryPending
+                      ? "Updating…"
+                      : groupMemoryStatus === "disabling"
+                        ? "Retry provider cleanup"
+                        : groupMemoryEnabled
+                        ? "Disable group memory"
+                        : "Enable group memory"}
+                  </button>
+                ) : (
+                  <p className="privacy-status">Backboard is unavailable until the server is configured.</p>
+                )
+              )}
+            </section>
             {reconstructionMessage && <p className="privacy-status" role="status">{reconstructionMessage}</p>}
             {moments.map((moment) => (
               <article className="group-moment" key={moment.id}>
@@ -509,19 +726,33 @@ export function GroupDetail({
                     ))}
                   </div>
                 )}
-                {moment.corrections?.map((correction, index) => (
-                  <p key={`correction-${index}`} className="moment-correction">
-                    Member correction ({correction.type}): {correction.value}
-                  </p>
-                ))}
                 <MomentReviewControls
                   groupId={groupId}
                   moment={moment}
+                  groupMemoryEnabled={groupMemoryEnabled}
+                  sharedCorrectionIds={new Set(sharedCorrections
+                    .filter((item) => item.momentId === moment.id && item.status === "synced")
+                    .map((item) => item.correctionId))}
                   otherMoments={moments.filter((other) =>
                     other.id !== moment.id &&
                     (other.status === "candidate" || other.status === "confirmed"),
                   )}
-                  onReview={(sourceId, updated) => void reviewMoment(sourceId, updated)}
+                  onReview={(sourceId, updated, cleanupPending) => {
+                    reviewMoment(sourceId, updated);
+                    if (!cleanupPending) {
+                      const keptCorrectionIds = new Set(
+                        updated.status === "confirmed"
+                          ? updated.corrections?.map((item) => item.id) ?? []
+                          : [],
+                      );
+                      setSharedCorrections((current) => current.filter((item) =>
+                        item.momentId !== sourceId &&
+                        item.momentId !== updated.id ||
+                        keptCorrectionIds.has(item.correctionId),
+                      ));
+                    }
+                  }}
+                  onMemoryChanged={updateSharedCorrection}
                 />
               </article>
             ))}
@@ -530,7 +761,16 @@ export function GroupDetail({
         </section>
       )}
       {!groupDeletionPending && memberRole === "owner" && (
-        <button className="text-button danger-button" onClick={requestGroupDeletion}>Request group deletion</button>
+        <>
+          {groupDeletionMessage && <p className="privacy-status" role="status">{groupDeletionMessage}</p>}
+          <button
+            className="text-button danger-button"
+            disabled={groupDeletionRequesting}
+            onClick={() => void requestGroupDeletion()}
+          >
+            {groupDeletionRequesting ? "Preparing deletion…" : "Request group deletion"}
+          </button>
+        </>
       )}
     </main>
   );

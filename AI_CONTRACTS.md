@@ -188,6 +188,15 @@ Moment uncertainty is derived by the server, not accepted from Gemma:
 
 The numeric confidence remains a model/system signal, not a factual probability, and cannot upgrade the deterministic uncertainty label. Invalid IDs or unsupported relationship claims reject the candidate rather than being silently rewritten.
 
+## Phase 5 group memory contract
+
+- Backboard is optional and off until a group owner/admin explicitly enables it.
+- Store only a correction a member explicitly shares from a confirmed Moment; never upload raw source text, private fragments, or unconfirmed proposals.
+- Read-only lookup may send the bounded summary/entities of an eligible group-visible, AI-consented anchor. Return at most three results, and accept only exact memory content whose provider ID, group, confirmed Moment, correction, and active evidence source all match MongoDB provenance.
+- Backboard meanings provide context, not source evidence for a Moment. They cannot create or upgrade event evidence or uncertainty.
+- Persist external operation references and status in MongoDB. A pending operation is not a completed memory write.
+- Disabling the integration or deleting the group removes the group's assistant and stored memories. Fragment privacy/deletion changes remove linked provider memories before local eligibility changes.
+
 ## Phase 3 retrieval state
 
 The current no-vector reranker uses deterministic time, lexical, extracted-entity, and available Moment-link signals, with a maximum of 12 candidate fragments per ContextPacket. Extracted entity phrases are unconfirmed clues, not identity or alias proof. A small synthetic test fixture covers a near-time lexical distractor; selecting an embedding model and demonstrating retrieval gains on a labeled real-fragment set remain open evaluation gates.

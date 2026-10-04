@@ -97,6 +97,12 @@ button { font: inherit; }
 .privacy-actions { display: flex; align-items: center; gap: 12px; }
 .danger-button { color: #9a3d28; }
 .privacy-status { flex-basis: 100%; margin: 0; color: var(--muted); font-size: 10px; }
+.group-memory-settings { display: flex; justify-content: space-between; align-items: start; gap: 16px; margin: 0 0 12px; padding: 12px; border: 1px solid var(--rule); }
+.group-memory-settings strong { font-size: 12px; }
+.group-memory-settings p { max-width: 620px; margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.group-memory-settings .text-button { flex: 0 0 auto; }
+.moment-correction-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.moment-correction-row .text-button { font-size: 10px; }
 .group-moment { padding: 16px 0; border-bottom: 1px solid var(--rule); }
 .group-moment h3 { margin: 10px 0 6px; font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif; font-size: 22px; font-weight: 500; }
 .group-moment > p { font-size: 13px; line-height: 1.5; }
@@ -111,6 +117,7 @@ button { font: inherit; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 
 @media (max-width: 760px) {
+  .group-memory-settings { display: grid; }
   .shell { padding: 0 20px 26px; }
   .topbar { height: 60px; }
   .group-label { max-width: 170px; text-align: right; font-size: 9px; }

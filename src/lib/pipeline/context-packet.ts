@@ -6,6 +6,7 @@ import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-frag
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { MAX_CONTEXT_CANDIDATES } from "@/lib/retrieval/ranking";
 import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
+import { searchConfirmedGroupMemories } from "@/lib/pipeline/group-backboard-memory";
 
 export interface ContextPacketFragment {
   fragment_id: string;
@@ -24,6 +25,12 @@ export interface FragmentContextPacket {
   anchor_fragment_id: string;
   time_window: { start: string; end: string };
   candidate_fragments: ContextPacketFragment[];
+  group_memories: Array<{
+    memory_id: string;
+    moment_id: string;
+    correction_type: string;
+    content: string;
+  }>;
 }
 
 export async function buildFragmentContextPacket(input: {
@@ -140,6 +147,12 @@ export async function buildFragmentContextPacket(input: {
       return [toContextFragment(fragment, analysis, candidate.retrievalScore, candidate.matchedSignals)];
     }),
   ].slice(0, MAX_CONTEXT_CANDIDATES);
+  const groupMemories = await searchConfirmedGroupMemories({
+    database: input.database,
+    groupId: input.groupId,
+    query: [anchorAnalysis.summary, ...anchorAnalysis.entities.slice(0, 8)].join(" ").slice(0, 500),
+    limit: 3,
+  });
 
   return {
     version: "context-packet-v1",
@@ -150,5 +163,11 @@ export async function buildFragmentContextPacket(input: {
       end: input.endAt.toISOString(),
     },
     candidate_fragments: candidateFragments,
+    group_memories: groupMemories.map((memory) => ({
+      memory_id: memory.memoryId,
+      moment_id: memory.momentId,
+      correction_type: memory.correctionType,
+      content: memory.content,
+    })),
   };
 }

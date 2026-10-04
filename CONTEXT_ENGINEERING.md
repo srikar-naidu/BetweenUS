@@ -4,7 +4,7 @@
 
 Provide the smallest authorized context that can answer one task. Context is not a shortcut around access control: group, author, visibility, AI consent, and deletion checks happen before retrieval and again before persistence.
 
-MongoDB owns structured facts and provenance. Tiger returns a bounded derived candidate set. Backboard contributes a few durable meanings the group explicitly confirmed. Gemma receives none of these stores wholesale.
+MongoDB owns structured facts and provenance. Tiger returns a bounded derived candidate set. Backboard contributes a few durable meanings members explicitly shared from confirmed Moments, but is disabled until an owner/admin opts the group in. When enabled, brief summaries/entities from eligible group-visible fragments may be sent as read-only search queries; raw source text is not sent to Backboard. Gemma receives none of these stores wholesale.
 
 ## Context profiles
 
@@ -79,7 +79,7 @@ The example is illustrative. Production packets must not contain the human-reada
 3. Apply deterministic time window and candidate-count limits.
 4. Query Tiger for temporal/lexical results; add semantic-vector search only after its model, dimensions, quality, and privacy behavior are verified.
 5. Expand a bounded set of MongoDB relationships (confirmed aliases, Places, Entities, Moments, Story edges) with same-group filters on every read.
-6. Fetch only a few relevant confirmed Backboard meanings for that group.
+6. If the group opted in, send a bounded query from the eligible anchor analysis and fetch at most three Backboard meanings. Accept only memories whose provider IDs, exact content, group, confirmed Moment, correction, and active evidence source match Mongo provenance.
 7. Deduplicate, rank, and truncate before building the packet.
 
 Use hard candidate and token budgets as configuration, record the budget/version, and measure recall versus false merges before changing them. A budget must never be raised to recover unauthorized/private data. Retrieval outages may fall back to a simpler temporal/lexical path; they may not fall back to cross-group or private history.

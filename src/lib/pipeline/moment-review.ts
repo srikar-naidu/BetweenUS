@@ -152,6 +152,7 @@ export async function reviewMoment(input: {
       throw new MomentReviewError(422, "Corrections must refer to eligible evidence in this moment");
     }
     const correction = {
+      id: randomUUID(),
       type: review.correctionType,
       fragmentId: review.fragmentId,
       value: review.value.trim(),
@@ -166,6 +167,7 @@ export async function reviewMoment(input: {
       details: {
         correctionType: correction.type,
         fragmentId: correction.fragmentId,
+        correctionId: correction.id,
         value: correction.value,
       },
     });
@@ -210,6 +212,7 @@ export async function reviewMoment(input: {
     const after = {
       ...before,
       evidence,
+      corrections: before.corrections.filter((correction) => correction.fragmentId !== review.fragmentId),
       status: sufficientlyCorroborated ? "candidate" as const : "draft" as const,
       uncertaintyLabel: sufficientlyCorroborated ? "possible" as const : "unknown" as const,
       uncertaintyReason: sufficientlyCorroborated
@@ -225,6 +228,7 @@ export async function reviewMoment(input: {
     });
     return persistReview(repository, moment, {
       evidence: after.evidence,
+      corrections: after.corrections,
       status: after.status,
       uncertaintyLabel: after.uncertaintyLabel,
       uncertaintyReason: after.uncertaintyReason,

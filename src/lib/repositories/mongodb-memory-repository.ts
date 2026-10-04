@@ -31,7 +31,10 @@ function asMoment(document: MomentDocument): Moment {
     ...moment,
     id: _id,
     reviewHistory: moment.reviewHistory ?? [],
-    corrections: moment.corrections ?? [],
+    corrections: (moment.corrections ?? []).map((correction, index) => ({
+      ...correction,
+      id: correction.id ?? `legacy-${_id}-${index}`,
+    })),
     revision: moment.revision ?? 0,
     mergedIntoMomentId: moment.mergedIntoMomentId ?? null,
   };
@@ -528,6 +531,14 @@ export class MongoMemoryRepository {
       groupId,
       "evidence.fragmentId": fragmentId,
       status: { $in: ["candidate", "confirmed"] },
+    }).project({ _id: 1 }).toArray();
+    return moments.map((moment) => String(moment._id));
+  }
+
+  async findMomentIdsContainingEvidence(groupId: string, fragmentId: string): Promise<string[]> {
+    const moments = await this.moments.find({
+      groupId,
+      "evidence.fragmentId": fragmentId,
     }).project({ _id: 1 }).toArray();
     return moments.map((moment) => String(moment._id));
   }

@@ -81,7 +81,7 @@ Text-fragment analysis is off by default. A contributor must explicitly enable A
 
 Text capture works without AI consent or Temporal. Consented analysis requires MongoDB, Temporal, the local Ollama model named by `GEMMA_MODEL`, and Tiger Data for group-visible projections. Do not put Temporal or model-service credentials in `NEXT_PUBLIC_` variables.
 
-Members can request Moment reconstruction from an eligible group-visible text fragment. Gemma receives a bounded context packet; the server validates evidence and derives uncertainty, and group members can review candidates, correct or remove evidence, and confirm moments. Merge actions require MongoDB transaction support. Backboard sync is not enabled.
+Members can request Moment reconstruction from an eligible group-visible text fragment. Gemma receives a bounded context packet; the server validates evidence and derives uncertainty, and group members can review candidates, correct or remove evidence, and confirm moments. Merge actions require MongoDB transaction support. Backboard memory is disabled by default: an owner/admin must enable it, and a member must explicitly share an individual correction on a confirmed Moment. Set `BACKBOARD_API_KEY` on the server; brief summaries/entities from eligible group-visible fragments may be sent as read-only search queries, but raw source text is not sent to Backboard. Disabling Backboard or deleting a group removes the group's Backboard assistant.
 
 
 ## Documentation set

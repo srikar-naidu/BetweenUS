@@ -8,6 +8,7 @@ import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-frag
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { indexEligibleFragmentAnalysis } from "@/lib/retrieval/index-fragment-analysis";
 import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
+import { deleteFragmentBackboardMemories } from "@/lib/pipeline/group-backboard-memory";
 
 export const runtime = "nodejs";
 
@@ -42,6 +43,9 @@ export async function PATCH(
     }
     const visibility = input.visibility as "private" | "group" | "restricted";
     const aiProcessingConsent = input.aiProcessingConsent;
+    if (visibility !== "group" || !aiProcessingConsent) {
+      await deleteFragmentBackboardMemories({ database, groupId, fragmentId });
+    }
     const analyses = new MongoFragmentAnalysisRepository(database);
     const existingAnalysis = aiProcessingConsent
       ? await analyses.find(groupId, fragmentId, FRAGMENT_ANALYSIS_VERSION)
@@ -122,12 +126,20 @@ export async function DELETE(
     const repository = new MongoMemoryRepository(database);
     const fragment = await repository.findFragmentById(groupId, fragmentId);
     if (!fragment) return Response.json({ error: "Fragment not found" }, { status: 404 });
+    const canManageGroup = membership.role === "owner" || membership.role === "admin";
+    if (
+      fragment.authorUserId !== session.user.id &&
+      !(canManageGroup && fragment.visibility === "group")
+    ) {
+      return Response.json({ error: "Fragment not found" }, { status: 404 });
+    }
+    await deleteFragmentBackboardMemories({ database, groupId, fragmentId });
     const legacyMediaCleanupRequired = fragment.source === "upload" && fragment.storageUri !== null;
     const requested = await repository.requestFragmentDeletion({
       groupId,
       fragmentId,
       actorUserId: session.user.id,
-      canManageGroup: membership.role === "owner" || membership.role === "admin",
+      canManageGroup,
     });
     if (!requested) return Response.json({ error: "Fragment not found" }, { status: 404 });
     if (process.env.TIGER_DATABASE_URL) {

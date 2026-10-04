@@ -8,6 +8,15 @@ import {
   type MomentReviewAction,
 } from "@/lib/pipeline/moment-review";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
+import { MongoBackboardRepository } from "@/lib/repositories/mongodb-backboard-repository";
+import {
+  BackboardApiError,
+  BackboardConfigurationError,
+} from "@/lib/integrations/backboard-client";
+import {
+  deleteCorrectionMemory,
+  GroupBackboardMemoryError,
+} from "@/lib/pipeline/group-backboard-memory";
 
 export const runtime = "nodejs";
 
@@ -66,8 +75,38 @@ export async function PATCH(
       actorUserId: session.user.id,
       review,
     });
+    const backboardRepository = new MongoBackboardRepository(await getMongoDatabase());
+    const allowedCorrectionIds = new Set(
+      moment.status === "confirmed" ? moment.corrections?.map((item) => item.id) ?? [] : [],
+    );
+    let memoryCleanupPending = false;
+    const affectedMoments = [...new Set([momentId, moment.id])];
+    for (const affectedMomentId of affectedMoments) {
+      const shared = await backboardRepository.findMemoryLinksForMoment(groupId, affectedMomentId);
+      for (const link of shared) {
+        if (allowedCorrectionIds.has(link.correctionId)) continue;
+        try {
+          await deleteCorrectionMemory({
+            database: await getMongoDatabase(),
+            groupId,
+            correctionId: link.correctionId,
+          });
+        } catch (error) {
+          if (
+            !(error instanceof BackboardApiError) &&
+            !(error instanceof BackboardConfigurationError) &&
+            !(error instanceof GroupBackboardMemoryError)
+          ) throw error;
+          memoryCleanupPending = true;
+          console.error("Backboard correction cleanup failed", error.name);
+        }
+      }
+    }
     return Response.json(
-      { moment: momentForGroupMember(moment) },
+      {
+        moment: momentForGroupMember(moment),
+        ...(memoryCleanupPending ? { memoryCleanupPending: true } : {}),
+      },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

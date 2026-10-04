@@ -170,6 +170,8 @@ The project can continue on local Gemma and synthetic demo data while these acco
 
 ### Phase 5: Backboard group memory integration
 
+**Current implementation status:** Backboard is server-configured and disabled by default. Owners/admins explicitly enable or disable one assistant per group; members can explicitly share only a correction attached to a confirmed Moment. MongoDB stores provider IDs, provenance, and asynchronous operation state. Reconstruction retrieves at most three group-scoped, verified memories and degrades to no Backboard context if provider retrieval fails. Group disable/deletion and fragment privacy/deletion changes remove linked provider data before local access is withdrawn. Provider memory operations are currently polled from the request path rather than Temporal. This repository has no member-removal route, so member-removal cleanup remains unwired. Provider/account retention terms and live behavior still require deployment verification.
+
 - Create one Backboard assistant per Between Us group and map its `assistant_id` in MongoDB. The assistant boundary is essential because Backboard memories are shared across all threads under one assistant.
 - Store only high-level group facts members confirmed: group aliases, stable place names, recurring references, and accepted corrections. Do not send raw media, private fragments, or speculative moment text.
 - Prefer explicit `addMemory`/`searchMemories`/`updateMemory`/`deleteMemory` operations. Use read-only retrieval for reconstruction; do not use automatic write-on-every-message memory for unreviewed interpretations.
@@ -177,7 +179,7 @@ The project can continue on local Gemma and synthetic demo data while these acco
 - Handle asynchronous memory operations; write operation references/status into MongoDB and do not treat a pending write as durable.
 - On member removal, group deletion, or memory correction, apply the documented cleanup and verify deletion through the provider API.
 
-**Exit gate:** group A cannot retrieve group B memory; only confirmed facts are written; memory removal is reflected in Backboard and Mongo provenance.
+**Exit gate:** tests prove group A cannot retrieve group B memory, unconfirmed Moments cannot write, only explicitly shared correction values are stored, pending operations stay tracked, and memory removal is reflected in Backboard/Mongo provenance. Live provider, account-retention, and operational cleanup behavior remain unverified.
 
 ### Phase 6: Optional voice-note input through ElevenLabs
 

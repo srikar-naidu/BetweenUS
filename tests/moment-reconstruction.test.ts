@@ -37,6 +37,7 @@ function packet(fragments: ContextPacketFragment[]): FragmentContextPacket {
       end: "2026-10-04T12:40:00.000Z",
     },
     candidate_fragments: fragments,
+    group_memories: [],
   };
 }
 

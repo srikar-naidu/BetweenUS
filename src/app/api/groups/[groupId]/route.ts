@@ -5,6 +5,7 @@ import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-frag
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
+import { disableGroupBackboard } from "@/lib/pipeline/group-backboard-memory";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,7 @@ export async function DELETE(
       { allowDeletionPending: true },
     );
     const database = await getMongoDatabase();
+    await disableGroupBackboard({ database, groupId });
     const repository = new MongoMemoryRepository(database);
     const ingestionRepository = new MongoIngestionRepository(database);
     const requested = await repository.requestGroupDeletion({

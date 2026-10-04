@@ -382,6 +382,7 @@ export async function reconstructMoment(input: {
           "Cite only fragment IDs in candidate_fragments.",
           "Each evidence relationship must be directly supported by the supplied facts, entities, timestamps, or summaries.",
           "Use shared_people only for an exactly repeated literal person mention; do not infer that names refer to the same real person.",
+          "Treat group_memories only as background context; they are not evidence for this event and must not be cited as fragment evidence.",
           "Every contradiction must cite exact evidence quotes present in the observations for each referenced fragment.",
           "List missing evidence and uncertainty notes rather than resolving ambiguous claims.",
           "Never set a certainty label. A deterministic validator and a group member control uncertainty and confirmation.",
