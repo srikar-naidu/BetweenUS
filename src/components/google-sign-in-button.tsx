@@ -5,7 +5,7 @@ import { authClient } from "@/lib/auth-client";
 
 export function GoogleSignInButton({
   enabled,
-  callbackURL = "/groups",
+  callbackURL = "/home",
 }: {
   enabled: boolean;
   callbackURL?: string;

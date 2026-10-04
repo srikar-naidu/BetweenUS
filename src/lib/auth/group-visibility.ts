@@ -42,6 +42,14 @@ export function visibleMomentsForMember(
   });
 }
 
+export function confirmedMomentsForEventStory(
+  moments: readonly Moment[],
+  fragments: readonly Fragment[],
+): Moment[] {
+  return visibleMomentsForMember(moments, fragments)
+    .filter((moment) => moment.status === "confirmed");
+}
+
 export function visibleStoriesForMember(
   stories: readonly Story[],
   moments: readonly Moment[],

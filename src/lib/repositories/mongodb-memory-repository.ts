@@ -274,6 +274,15 @@ export class MongoMemoryRepository {
     return documents.map(asFragment);
   }
 
+  async findRecentGroupVisibleFragments(groupId: string, limit = 100): Promise<Fragment[]> {
+    const documents = await this.fragments
+      .find({ groupId, visibility: "group", deletionState: "active" })
+      .sort({ capturedAt: -1 })
+      .limit(limit)
+      .toArray();
+    return documents.map(asFragment);
+  }
+
   async updateFragmentPrivacy(input: {
     groupId: string;
     fragmentId: string;

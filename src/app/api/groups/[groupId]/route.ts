@@ -9,6 +9,7 @@ import { disableGroupBackboard } from "@/lib/pipeline/group-backboard-memory";
 import { MongoVoiceStorage } from "@/lib/repositories/mongodb-voice-storage";
 import { MongoVoiceRepository } from "@/lib/repositories/mongodb-voice-repository";
 import { MongoStoryRepository } from "@/lib/repositories/mongodb-story-repository";
+import { MongoEventStoryRepository } from "@/lib/repositories/mongodb-event-story-repository";
 import { isManagedGroupMediaStorageUri, MongoGroupMediaStorage } from "@/lib/repositories/mongodb-group-media-storage";
 
 export const runtime = "nodejs";
@@ -35,6 +36,7 @@ export async function DELETE(
     });
     if (!requested) return Response.json({ error: "Group not found" }, { status: 404 });
     await new MongoStoryRepository(database).deleteGroup(groupId);
+    await new MongoEventStoryRepository(database).deleteGroup(groupId);
     if (process.env.TIGER_DATABASE_URL) {
       await new TigerDataFragmentSearch().removeGroupFragments(groupId);
     }

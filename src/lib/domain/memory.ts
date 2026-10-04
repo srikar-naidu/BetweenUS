@@ -82,6 +82,33 @@ export interface StoryReconstructionJob {
   updatedAt: Date;
 }
 
+export interface FriendProfile {
+  id: string;
+  name: string;
+  image: string | null;
+}
+
+export interface FriendConnection {
+  id: string;
+  requesterId: string;
+  recipientId: string;
+  status: "pending" | "accepted";
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface EventStoryDocument {
+  id: string;
+  groupId: string;
+  title: string;
+  narrative: string;
+  momentIds: string[];
+  revision: number;
+  updatedBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
 export interface MomentCorrection {
   id: string;
   type: MomentCorrectionType;

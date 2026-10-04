@@ -1847,3 +1847,88 @@ body {
   .post-open-button { min-width: 80px; }
   .post-image-preview, .post-video-preview { max-height: 320px; }
 }
+
+.memory-navigation { display: flex; align-items: center; gap: clamp(12px, 2.2vw, 28px); }
+.memory-navigation a, .top-actions a { color: var(--muted); font-size: 11px; text-decoration: none; }
+.memory-navigation a[aria-current="page"] { color: var(--green); font-weight: 700; }
+.journal-welcome { padding: 52px 0 34px; }
+.journal-welcome h1, .event-story-header h1 { margin: 0; font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif; font-size: clamp(42px, 6vw, 68px); font-weight: 500; letter-spacing: -.035em; }
+.journal-welcome > p:last-child { margin: 12px 0 0; color: var(--muted); font-size: 14px; }
+.journal-week { margin: 0 0 34px; }
+.journal-week > h2 { margin: 0 0 12px; color: var(--muted); font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
+.journal-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; }
+.journal-day { position: relative; display: flex; min-height: 118px; flex-direction: column; justify-content: space-between; overflow: hidden; border: 1px solid var(--rule); background: #eeece2; color: var(--ink); text-decoration: none; }
+.journal-day > img, .journal-day > video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.journal-day--posted { min-height: 156px; background: #e1e6dc; }
+.journal-day-label { position: relative; display: flex; justify-content: space-between; gap: 4px; padding: 7px; background: linear-gradient(180deg, rgba(245,242,233,.93), rgba(245,242,233,.72)); font-size: 10px; }
+.journal-day-label small { color: var(--muted); font-size: 9px; }
+.journal-day-copy { display: -webkit-box; max-height: 88px; overflow: hidden; padding: 12px 9px; font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif; font-size: 13px; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 5; }
+.journal-day-audio { display: block; align-self: center; padding: 18px 2px; color: var(--green); font-size: 13px; letter-spacing: 3px; }
+.journal-day-count { position: absolute; right: 5px; bottom: 34px; padding: 3px 6px; border-radius: 99px; background: var(--ink); color: white; font-size: 9px; }
+.journal-empty { max-width: 520px; margin: 44px auto; padding: 38px 20px; text-align: center; }
+.journal-empty-icon { color: var(--coral); font-size: 35px; }
+.journal-empty h2 { margin: 12px 0 8px; font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif; font-size: 25px; font-weight: 500; }
+.journal-empty p, .privacy-status { color: var(--muted); font-size: 12px; line-height: 1.55; }
+.journal-empty .link-button { margin: 12px auto 0; }
+.journal-page > .privacy-status { margin-top: 35px; padding-top: 15px; border-top: 1px solid var(--rule); }
+.album-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; }
+.album-card { overflow: hidden; border: 1px solid var(--rule); background: #fffdf8; color: var(--ink); text-decoration: none; transition: transform .16s ease, box-shadow .16s ease; }
+.album-card:hover { transform: translateY(-3px); box-shadow: 4px 5px 0 #d7d9ce; }
+.album-cover { display: grid; aspect-ratio: 4 / 3; place-items: center; overflow: hidden; background: #e5e9df; color: var(--green); font-size: 40px; }
+.album-cover img, .album-cover video { width: 100%; height: 100%; object-fit: cover; }
+.album-card-copy { padding: 14px; }
+.album-card-copy h2 { margin: 0; font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif; font-size: 22px; font-weight: 500; }
+.album-card-copy p { min-height: 34px; margin: 7px 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.album-card-copy > span, .album-create-row p { color: var(--muted); font-size: 10px; }
+.album-create-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 32px; padding-top: 14px; border-top: 1px solid var(--rule); }
+.event-story-header { padding: 40px 0 25px; }
+.event-story-header .lede { max-width: 620px; }
+.event-story-editor { display: grid; gap: 16px; padding: 18px; border: 1px solid var(--rule); background: #fffdf8; }
+.event-story-editor > label { display: grid; gap: 7px; color: var(--muted); font-size: 11px; }
+.event-story-editor input:not([type="checkbox"]), .event-story-editor textarea { width: 100%; border: 1px solid var(--rule); border-radius: 2px; background: #fbfaf5; color: var(--ink); font: inherit; font-size: 13px; }
+.event-story-editor input:not([type="checkbox"]) { min-height: 42px; padding: 8px 10px; }
+.event-story-editor textarea { min-height: 230px; padding: 12px; line-height: 1.65; resize: vertical; }
+.event-story-actions, .event-story-save-row { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.event-story-actions > span { color: var(--muted); font-size: 10px; }
+.event-story-save-row .privacy-status, .event-story-save-row .error-message { margin: 0; }
+.event-timeline { margin-top: 40px; }
+.event-timeline > .section-head { align-items: center; margin-bottom: 18px; }
+.event-timeline > .section-head h2 { margin: 0; font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif; font-size: 27px; font-weight: 500; }
+.event-timeline-list { position: relative; display: grid; gap: 0; margin: 0; padding: 0 0 0 24px; list-style: none; }
+.event-timeline-list::before { position: absolute; top: 0; bottom: 0; left: 5px; width: 1px; background: var(--rule); content: ""; }
+.event-timeline-item { position: relative; padding: 0 0 28px 12px; }
+.event-timeline-item::before { position: absolute; top: 5px; left: -23px; width: 9px; height: 9px; border-radius: 50%; background: var(--coral); content: ""; }
+.event-moment-select { display: flex; align-items: center; gap: 6px; margin-bottom: 9px; color: var(--muted); font-size: 10px; }
+.event-moment-select input { accent-color: var(--green); }
+.event-timeline-item time { color: var(--green); font-size: 10px; }
+.event-timeline-item h3 { margin: 5px 0; font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif; font-size: 22px; font-weight: 500; }
+.event-timeline-item > p { max-width: 680px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.event-evidence-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 220px)); gap: 10px; margin: 12px 0 0; padding: 0; list-style: none; }
+.event-evidence-grid li { min-width: 0; }
+.event-evidence-grid img, .event-evidence-grid video { display: block; width: 100%; max-height: 180px; border: 1px solid var(--rule); background: #e5e9df; object-fit: cover; }
+.event-evidence-grid .audio-waveform { width: 100%; padding: 8px; }
+.event-evidence-quote, .event-evidence-caption { margin: 5px 0; color: var(--muted); font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
+.event-evidence-quote { font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif; font-size: 12px; }
+@media (max-width: 760px) {
+  .memory-navigation { gap: 12px; }
+  .memory-navigation a { font-size: 10px; }
+  .album-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .journal-days { gap: 5px; }
+  .journal-day { min-height: 90px; }
+  .journal-day--posted { min-height: 124px; }
+  .journal-day-label { display: grid; gap: 0; padding: 5px; font-size: 9px; }
+  .journal-day-copy { padding: 7px 5px; font-size: 11px; }
+  .album-create-row { align-items: flex-start; flex-direction: column; }
+}
+@media (max-width: 520px) {
+  .memory-navigation { gap: 8px; }
+  .memory-navigation a { font-size: 9px; }
+  .topbar > .wordmark { font-size: 20px; }
+  .journal-welcome { padding-top: 38px; }
+  .journal-days { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .journal-week { margin-bottom: 24px; }
+  .album-grid { grid-template-columns: minmax(0, 1fr); }
+  .album-cover { aspect-ratio: 16 / 9; }
+  .event-story-editor { padding: 12px; }
+  .event-story-save-row { align-items: flex-start; flex-direction: column; }
+}

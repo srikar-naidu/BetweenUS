@@ -780,9 +780,11 @@ export function GroupDetail({
     <main className="shell trust-page group-page" id="main-content">
       <a className="skip-link" href="#group-content">Skip to group timeline</a>
       <header className="topbar">
-        <Link className="wordmark" href="/">between us<span>.</span></Link>
+        <Link className="wordmark" href="/home">between us<span>.</span></Link>
         <nav className="top-actions" aria-label="Group navigation">
-          <Link href="/groups">All spaces</Link>
+          <Link href="/home">Home</Link>
+          <Link href="/friends">Friends</Link>
+          <Link href="/albums">Albums</Link>
           <Link href="#add-fragment">Add a memory <span aria-hidden="true">+</span></Link>
         </nav>
       </header>
@@ -802,6 +804,7 @@ export function GroupDetail({
           <a href="#fragments">Fragments <span>{fragments.length.toString().padStart(2, "0")}</span></a>
           <a href="#moments">Moments <span>{moments.length.toString().padStart(2, "0")}</span></a>
           <a href="#stories">Stories <span>{stories.length.toString().padStart(2, "0")}</span></a>
+          <Link href={`/groups/${groupId}/story`}>Event story</Link>
           <a href="#group-memory">Group memory</a>
           {(memberRole === "owner" || memberRole === "admin") && (
             <a href="#invite-people">Invite people</a>

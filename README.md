@@ -24,6 +24,8 @@ The key abstraction is:
 
 The user experience is designed to answer: “We forgot this happened,” not “Here is a pretty AI recap.”
 
+The signed-in experience also includes a weekly Home journal, Friends discovery, and Albums. Each group is an album; a friend connection alone never shares a person's posts or grants album access. Members can optionally let others find them by name. An album's Event story is a separate, editable recap built only from its currently member-visible, confirmed Moments; members choose which Moments to include and can edit the text before saving.
+
 ## Core user experience
 
 1. Multiple people contribute text fragments from the same period.

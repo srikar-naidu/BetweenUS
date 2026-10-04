@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { groupSummaryForMember, membershipAllows, mongoIdVariants } from "../src/lib/auth/group-access";
-import { momentForGroupMember, visibleMomentsForMember } from "../src/lib/auth/group-visibility";
+import {
+  confirmedMomentsForEventStory,
+  momentForGroupMember,
+  visibleMomentsForMember,
+} from "../src/lib/auth/group-visibility";
 import type { Fragment, Moment } from "../src/lib/domain/memory";
 
 const member = {
@@ -161,6 +165,7 @@ test("moment evidence cannot cross group, visibility, consent, or deletion bound
   });
   const moments = [
     moment("moment-a", "group-a", ["a-visible"]),
+    { ...moment("moment-confirmed", "group-a", ["a-visible"]), status: "confirmed" as const },
     moment("moment-b", "group-b", ["b-visible"]),
     moment("moment-cross-group", "group-a", ["b-only"]),
     moment("moment-private", "group-a", ["a-private"]),
@@ -178,6 +183,10 @@ test("moment evidence cannot cross group, visibility, consent, or deletion bound
 
   assert.deepEqual(
     visibleMomentsForMember(moments, fragments).map(({ id }) => id),
-    ["moment-a", "moment-b"],
+    ["moment-a", "moment-confirmed", "moment-b"],
+  );
+  assert.deepEqual(
+    confirmedMomentsForEventStory(moments, fragments).map(({ id }) => id),
+    ["moment-confirmed"],
   );
 });

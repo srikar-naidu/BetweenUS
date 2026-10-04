@@ -2,6 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { GroupManager, type GroupSummary } from "@/components/group-manager";
+import { MemoryNavigation } from "@/components/memory-navigation";
 import { getAuth, getAuthConfigurationStatus } from "@/lib/auth";
 import { listGroupsForUser } from "@/lib/auth/group-access";
 
@@ -34,8 +35,8 @@ export default async function GroupsPage() {
     <main className="shell trust-page" id="main-content">
       <a className="skip-link" href="#groups-content">Skip to group spaces</a>
       <header className="topbar">
-        <Link className="wordmark" href="/">between us<span>.</span></Link>
-        <span className="group-label">SIGNED IN / PRIVATE SPACES</span>
+        <Link className="wordmark" href="/home">between us<span>.</span></Link>
+        <MemoryNavigation active="albums" />
       </header>
       <section className="intro" id="groups-content" tabIndex={-1}>
         <p className="eyebrow">YOUR PEOPLE, YOUR PRIVATE SPACE</p>
