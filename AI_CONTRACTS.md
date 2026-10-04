@@ -11,14 +11,18 @@ The system should prefer JSON contracts that can be validated before storing or 
 ```json
 {
   "fragment_id": "string",
-  "summary": "short exact excerpt from the source text",
+  "summary": "exact source excerpt or deterministic summary of visual observations",
   "observed_facts": [
     {
-      "type": "person|place|object|activity|tone|reference",
+      "type": "person|place|object|activity|tone|reference|visible_text",
       "value": "string",
       "confidence": 0.0,
-      "source": "text",
-      "evidence": "short exact quote from the source text"
+      "evidence": {
+        "fragment_id": "source fragment ID",
+        "modality": "text|voice_transcript|image|video_frame",
+        "locator": "string|null",
+        "evidence": "exact text quote or bounded visual evidence"
+      }
     }
   ],
   "people": ["string"],
@@ -35,7 +39,7 @@ The system should prefer JSON contracts that can be validated before storing or 
 }
 ```
 
-Phase 3 adds server-owned `analysis_version`, configured `model_version`, `source_text_sha256`, and `analyzed_at` provenance when persisting this contract. The current implementation accepts text fragments only. Fact values must appear inside their exact evidence spans, summaries must be exact source excerpts, and literal people/entity phrases must appear in the source text; the model cannot emit `likely` or `confirmed`.
+The server adds `analysis_version`, configured `model_version`, source digest, and `analyzed_at` provenance when persisting this contract. Text fact values must appear inside their exact evidence spans; visual facts must name a supplied image/frame locator and remain at or below 0.7 confidence. Text summaries must be exact source excerpts, and literal people/entity phrases must appear in the source text. Uncertainty status and its reason are derived from validated evidence by the server; model confidence cannot promote a fragment to `likely` or `confirmed`.
 
 ## Contract: MomentReconstructionProposal
 
@@ -114,26 +118,56 @@ MongoDB adds reconstruction model/retrieval versions, validation outcome, contra
 }
 ```
 
-## Contract: StoryCandidate
+## Contract: StoryConnectionProposal
+
+Gemma receives at most eight confirmed group Moments with only their bounded summaries, validated observations, entities, and source IDs. It may propose one connection across at least two Moments. The server validates every Moment ID and relationship against the packet and attaches the corresponding source Fragment IDs. No group ID, raw media, or full database content is sent.
 
 ```json
 {
-  "story_id": "string|null",
+  "title": "string|null",
+  "summary": "string|null",
+  "confidence": 0.0,
+  "evidence": [
+    {
+      "moment_id": "confirmed Moment ID from the supplied packet",
+      "relationship": "shared_people|same_location|recurring_theme|timeline_connection"
+    }
+  ]
+}
+```
+
+Return null title and summary with no evidence when there is no supported connection. The application rejects unsupported relationships and derives `possible` uncertainty; only an explicit member review can confirm or reject the persisted Story.
+
+## Contract: Story
+
+```json
+{
+  "story_id": "string",
   "group_id": "string",
-  "moment_ids": ["string"],
   "title": "string",
   "summary": "string",
   "confidence": 0.0,
   "uncertainty": {
-    "status": "confirmed|likely|possible|unknown",
+    "status": "possible|confirmed",
     "reason": "string"
   },
+  "status": "candidate|confirmed|rejected",
+  "moment_ids": ["confirmed Moment ID"],
+  "reconstruction_version": "string",
+  "model_version": "string",
+  "source_key": "sha256 of Moment IDs, revisions, timestamps, and evidence",
   "evidence": [
     {
-      "moment_id": "string",
-      "relationship": "shared_people|same_location|recurring_theme|timeline_connection"
+      "moment_id": "confirmed Moment ID",
+      "moment_revision": 0,
+      "relationship": "shared_people|same_location|recurring_theme|timeline_connection",
+      "fragment_ids": ["source Fragment ID"],
+      "fragment_source_digests": [
+        { "fragment_id": "source Fragment ID", "source_content_sha256": "sha256" }
+      ]
     }
-  ]
+  ],
+  "revision": 0
 }
 ```
 

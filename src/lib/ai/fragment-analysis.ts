@@ -339,10 +339,13 @@ export function validateFragmentAnalysisOutput(
 
   const uncertainty = recordValue(result.uncertainty, "uncertainty");
   const expectedStatus = observedFacts.length ? "possible" : "unknown";
-  if (uncertainty.status !== expectedStatus) {
-    throw new FragmentAnalysisValidationError("Gemma returned an uncertainty status inconsistent with its evidence");
+  if (uncertainty.status !== "possible" && uncertainty.status !== "unknown") {
+    throw new FragmentAnalysisValidationError("Gemma returned an unsupported uncertainty status");
   }
-  const reason = validateText(uncertainty.reason, "uncertainty reason", 300);
+  validateText(uncertainty.reason, "uncertainty reason", 300);
+  const reason = observedFacts.length
+    ? "The fragment contains directly cited observations, but their broader meaning remains uncertain."
+    : "No directly supported observations were extracted from this fragment.";
   if (!Array.isArray(result.evidence_fragment_ids) ||
       result.evidence_fragment_ids.length !== 1 ||
       result.evidence_fragment_ids[0] !== fragmentId) {
@@ -461,9 +464,11 @@ export async function generateFragmentAnalysis(
             "Use only the supplied text as evidence.",
             "Do not infer a person's identity or appearance.",
             "For each fact, cite an exact source span that contains the literal fact value and reference this fragment ID.",
-            "The summary must be a short exact excerpt from the source text, not a paraphrase.",
+            "Set summary to a verbatim substring of text_content, preserving every character. Do not paraphrase or normalize it.",
+            "Set each hint only to the exact value of an observed fact with the matching type (place, activity, or tone); otherwise set it to null.",
+            "Set uncertainty.status to possible if observed_facts is non-empty; otherwise set it to unknown.",
             "People and entities must be literal phrases in the source text.",
-            "Use uncertainty status possible when there is extracted evidence, otherwise unknown. Never use likely or confirmed.",
+            "Never use likely or confirmed.",
           ]
         : visualConstraints,
     },

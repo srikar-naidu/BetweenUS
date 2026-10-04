@@ -11,6 +11,12 @@ export interface MomentReconstructionWorkflowInput extends FragmentWorkflowInput
   requesterUserId: string;
 }
 
+export interface StoryReconstructionWorkflowInput {
+  jobId: string;
+  groupId: string;
+  requesterUserId: string;
+}
+
 const runActivity = proxyActivities<typeof activities>({
   startToCloseTimeout: "1 minute",
   retry: {
@@ -41,6 +47,15 @@ const reconstructionActivity = proxyActivities<typeof activities>({
 const transcriptionActivity = proxyActivities<typeof activities>({
   startToCloseTimeout: "2 minutes",
   retry: { maximumAttempts: 1 },
+});
+
+const storyActivity = proxyActivities<typeof activities>({
+  startToCloseTimeout: "10 minutes",
+  retry: {
+    initialInterval: "5 seconds",
+    maximumInterval: "30 seconds",
+    maximumAttempts: 2,
+  },
 });
 
 export async function transcribeVoiceWorkflow(input: FragmentWorkflowInput): Promise<void> {
@@ -142,6 +157,37 @@ export async function reconstructMomentWorkflow(
     await runActivity.markProcessingJobFailed({
       jobId: input.jobId,
       errorCategory: "moment_reconstruction_failed",
+    });
+    throw error;
+  }
+}
+
+export async function reconstructStoryWorkflow(
+  input: StoryReconstructionWorkflowInput,
+): Promise<void> {
+  const workflowId = workflowInfo().workflowId;
+  try {
+    await storyActivity.markStoryJobStarted({
+      jobId: input.jobId,
+      groupId: input.groupId,
+      workflowId,
+    });
+    const result = await storyActivity.reconstructStoryForGroup({
+      groupId: input.groupId,
+      requesterUserId: input.requesterUserId,
+      storyId: `story-${input.jobId}`,
+    });
+    await storyActivity.markStoryJobSucceeded({
+      jobId: input.jobId,
+      groupId: input.groupId,
+      storyId: result.storyId,
+      outcome: result.outcome,
+    });
+  } catch (error) {
+    await storyActivity.markStoryJobFailed({
+      jobId: input.jobId,
+      groupId: input.groupId,
+      errorCategory: "story_reconstruction_failed",
     });
     throw error;
   }

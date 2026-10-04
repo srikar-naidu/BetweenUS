@@ -1,4 +1,5 @@
 import { Client, Connection, WorkflowExecutionAlreadyStartedError } from "@temporalio/client";
+import type { StoryReconstructionJob } from "@/lib/domain/memory";
 import type { ProcessingJob } from "@/lib/repositories/mongodb-ingestion-repository";
 
 export interface TemporalSettings {
@@ -82,6 +83,28 @@ export async function startMomentReconstructionWorkflow(
     throw new TypeError("Moment reconstruction workflows require a reconstruction job");
   }
   return startWorkflow(job, "reconstructMomentWorkflow", requesterUserId);
+}
+
+export async function startStoryReconstructionWorkflow(
+  job: StoryReconstructionJob,
+): Promise<string> {
+  const { client, settings } = await getTemporalClient();
+  const workflowId = `between-us-story-${job.id}`;
+  try {
+    await client.workflow.start("reconstructStoryWorkflow", {
+      workflowId,
+      taskQueue: settings.taskQueue,
+      args: [{
+        jobId: job.id,
+        groupId: job.groupId,
+        requesterUserId: job.requesterUserId,
+      }],
+      workflowExecutionTimeout: "30 minutes",
+    });
+  } catch (error) {
+    if (!(error instanceof WorkflowExecutionAlreadyStartedError)) throw error;
+  }
+  return workflowId;
 }
 
 async function startWorkflow(

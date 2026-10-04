@@ -10,10 +10,12 @@ import { createGemmaService } from "@/lib/ai/gemma-provider";
 import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
+import { MongoStoryRepository } from "@/lib/repositories/mongodb-story-repository";
 import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-fragment-analysis-repository";
 import { indexEligibleFragmentAnalysis } from "@/lib/retrieval/index-fragment-analysis";
 import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
 import { reconstructMoment } from "@/lib/pipeline/moment-reconstruction";
+import { reconstructStoryConnection } from "@/lib/pipeline/story-reconstruction";
 import { hasAnalyzableFragmentSource, hasApprovedTextSource } from "@/lib/domain/memory";
 import {
   ElevenLabsApiError,
@@ -269,6 +271,66 @@ export async function reconstructMomentForFragment(input: {
     momentId: input.momentId,
   });
   return result.moment.id;
+}
+
+export async function markStoryJobStarted(input: {
+  jobId: string;
+  groupId: string;
+  workflowId: string;
+}): Promise<void> {
+  await new MongoStoryRepository(await getMongoDatabase()).markStoryJobStarted(input);
+}
+
+export async function reconstructStoryForGroup(input: {
+  groupId: string;
+  requesterUserId: string;
+  storyId: string;
+}): Promise<{ storyId: string | null; outcome: "candidate" | "insufficient_evidence" }> {
+  if (!ObjectId.isValid(input.groupId) || !ObjectId.isValid(input.requesterUserId)) {
+    throw ApplicationFailure.nonRetryable("Story requester is unavailable", "RequesterUnavailable");
+  }
+  const database = await getMongoDatabase();
+  const result = await reconstructStoryConnection({
+    database,
+    groupId: input.groupId,
+    storyId: input.storyId,
+    authorizationCheck: async () => {
+      const [activeMembership, activeGroup] = await Promise.all([
+        database.collection("group_members").findOne({
+          organizationId: new ObjectId(input.groupId),
+          userId: new ObjectId(input.requesterUserId),
+        }),
+        database.collection("groups").findOne({
+          _id: new ObjectId(input.groupId),
+          lifecycleStatus: "active",
+        }),
+      ]);
+      if (!activeMembership || !activeGroup) {
+        throw ApplicationFailure.nonRetryable(
+          "Story requester is no longer a group member",
+          "MembershipUnavailable",
+        );
+      }
+    },
+  });
+  return { storyId: result.story?.id ?? null, outcome: result.outcome };
+}
+
+export async function markStoryJobSucceeded(input: {
+  jobId: string;
+  groupId: string;
+  storyId: string | null;
+  outcome: "candidate" | "insufficient_evidence";
+}): Promise<void> {
+  await new MongoStoryRepository(await getMongoDatabase()).markStoryJobSucceeded(input);
+}
+
+export async function markStoryJobFailed(input: {
+  jobId: string;
+  groupId: string;
+  errorCategory: string;
+}): Promise<void> {
+  await new MongoStoryRepository(await getMongoDatabase()).markStoryJobFailed(input);
 }
 
 export async function markProcessingJobSucceeded(input: {

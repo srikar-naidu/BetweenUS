@@ -399,6 +399,7 @@ export async function reconstructMoment(input: {
   if (packet.candidate_fragments.length >= 2 && distinctAuthors.size >= 2) {
     const generated = await generator.generateStructured({
       task: "reconstruct_possible_moment",
+      think: true,
       contextPacket: {
         ...packet,
         constraints: [

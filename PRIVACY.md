@@ -16,7 +16,7 @@ Rules:
 
 ## Media visibility
 
-Image/video upload and third-party object-storage retrieval are disabled. Optional voice notes are stored in a private MongoDB GridFS bucket and are available only through authenticated, group-scoped routes. Existing legacy media records may remain for compatibility, and any original files in a previously configured bucket require manual cleanup.
+Images, videos, and optional voice notes are stored in private MongoDB GridFS buckets and are available only through authenticated, group-scoped routes. Image/video inference is opt-in and sends only the source image or a bounded set of sampled frames to the configured Gemma service. Raw voice recordings are not sent to Gemma; only a transcript explicitly reviewed by its author is eligible. Existing legacy media records may remain for compatibility, and any original files in a previously configured bucket require manual cleanup.
 
 The system must enforce:
 
@@ -37,6 +37,11 @@ Rules:
 - AI observations must carry evidence references
 - AI-generated interpretations must not bypass visibility rules
 - private fragments must remain private unless explicitly allowed
+- Local development uses the developer's local Ollama; production uses the private Render Ollama service. Production must not point to a developer PC, GPU, LAN, or localhost.
+- Raw image/audio/video bytes, prompts, transcripts, and model responses must not be logged or sent to Sentry.
+- Render's Gemma service is private-network-only and does not use an externally hosted LLM; optional external providers have separate opt-in consent and data-flow rules below.
+- Story reconstruction is member-triggered and group-scoped. Gemma receives at most eight confirmed Moments plus bounded authorized observations and opaque source IDs, never raw media or the full database.
+- Story candidates are visible only while every linked Moment remains confirmed and every source Fragment remains active, group-visible, and AI-consented. Group deletion removes Story records and pending Story jobs.
 
 ## Deletion and correction
 

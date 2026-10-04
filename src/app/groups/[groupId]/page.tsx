@@ -4,10 +4,16 @@ import { notFound, redirect } from "next/navigation";
 import { GroupDetail, type GroupFragmentView } from "@/components/group-detail";
 import { getAuth, getAuthConfigurationStatus } from "@/lib/auth";
 import { GroupAccessError, requireGroupMembership } from "@/lib/auth/group-access";
-import { momentForGroupMember, visibleMomentsForMember } from "@/lib/auth/group-visibility";
+import {
+  momentForGroupMember,
+  storyForGroupMember,
+  visibleMomentsForMember,
+  visibleStoriesForMember,
+} from "@/lib/auth/group-visibility";
 import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
+import { MongoStoryRepository } from "@/lib/repositories/mongodb-story-repository";
 import { isManagedGroupMediaStorageUri } from "@/lib/repositories/mongodb-group-media-storage";
 
 export const dynamic = "force-dynamic";
@@ -44,16 +50,26 @@ export default async function GroupPage({
 
   const database = await getMongoDatabase();
   const repository = new MongoMemoryRepository(database);
+  const storyRepository = new MongoStoryRepository(database);
   const ingestionRepository = new MongoIngestionRepository(database);
-  const [memberFragments, groupMoments] = await Promise.all([
+  const [memberFragments, groupMoments, groupStories, pendingStoryJobs] = await Promise.all([
     repository.findMemberVisibleFragments(groupId, session.user.id),
     repository.listMoments(groupId),
+    storyRepository.listStories(groupId),
+    storyRepository.listPendingStoryJobs(groupId, session.user.id),
   ]);
   const processingStatuses = await ingestionRepository.latestProcessingStatusByFragmentIds(
     groupId,
     memberFragments.map((fragment) => fragment.id),
   );
   const moments = visibleMomentsForMember(groupMoments, memberFragments).map(momentForGroupMember);
+  const storyFragmentIds = [...new Set([
+    ...groupMoments.flatMap((moment) => moment.evidence.map(({ fragmentId }) => fragmentId)),
+    ...groupStories.flatMap((story) => story.evidence.flatMap((item) => item.fragmentIds)),
+  ])];
+  const storyFragments = await repository.findEligibleGroupVisibleFragmentsByIds(groupId, storyFragmentIds);
+  const stories = visibleStoriesForMember(groupStories, groupMoments, storyFragments)
+    .map(storyForGroupMember);
   const fragments: GroupFragmentView[] = memberFragments.map(({ storageUri, ...fragment }) => ({
     ...fragment,
     processingJobStatus: fragment.aiProcessingConsent ? processingStatuses.get(fragment.id) ?? null : null,
@@ -69,6 +85,8 @@ export default async function GroupPage({
       groupName={typeof access.group.name === "string" ? access.group.name : "Private group"}
       initialFragments={fragments}
       initialMoments={moments}
+      initialStories={stories}
+      initialStoryJobIds={pendingStoryJobs.map((job) => job.id)}
       currentUserId={session.user.id}
       memberRole={access.membership.role as "owner" | "admin" | "member"}
     />

@@ -23,7 +23,10 @@ services:
       - key: GOOGLE_CLIENT_SECRET
         sync: false
       - key: OLLAMA_HOST
-        sync: false
+        fromService:
+          type: pserv
+          name: betweenus-gemma
+          property: hostport
       - key: TEMPORAL_ADDRESS
         sync: false
       - key: TEMPORAL_NAMESPACE
@@ -50,7 +53,10 @@ services:
       - key: TIGER_DATABASE_URL
         sync: false
       - key: OLLAMA_HOST
-        sync: false
+        fromService:
+          type: pserv
+          name: betweenus-gemma
+          property: hostport
       - key: TEMPORAL_ADDRESS
         sync: false
       - key: TEMPORAL_NAMESPACE
@@ -60,6 +66,34 @@ services:
       - key: SENTRY_DSN
         sync: false
 
+  - type: pserv
+    name: betweenus-gemma
+    runtime: docker
+    region: oregon
+    plan: 4c-16g
+    dockerfilePath: ./deploy/gemma/Dockerfile
+    dockerContext: ./deploy/gemma
+    autoDeploy: false
+    disk:
+      name: betweenus-gemma-models
+      mountPath: /root/.ollama
+      sizeGB: 20
+    envVars:
+      - key: GEMMA_MODEL
+        value: gemma4:e2b
+      - key: OLLAMA_HOST
+        value: 0.0.0.0:11434
+      - key: OLLAMA_NO_CLOUD
+        value: "1"
+      - key: OLLAMA_CONTEXT_LENGTH
+        value: "4096"
+      - key: OLLAMA_NUM_PARALLEL
+        value: "1"
+      - key: OLLAMA_MAX_LOADED_MODELS
+        value: "1"
+      - key: OLLAMA_KEEP_ALIVE
+        value: 5m
+
 envVarGroups:
   - name: betweenus-shared
     envVars:
@@ -67,8 +101,10 @@ envVarGroups:
         value: production
       - key: MONGODB_DB_NAME
         value: between_us
+      - key: GEMMA_RUNTIME
+        value: render
       - key: GEMMA_MODEL
-        value: gemma4:e2b-it-q4_K_M
+        value: gemma4:e2b
       - key: GEMMA_TIMEOUT_MS
         value: "300000"
       - key: TEMPORAL_TLS

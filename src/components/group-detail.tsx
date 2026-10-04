@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import type { Fragment, MemberMoment, MomentCorrection } from "@/lib/domain/memory";
+import type { Fragment, MemberMoment, MemberStory, MomentCorrection } from "@/lib/domain/memory";
 import { hasApprovedTextSource } from "@/lib/domain/memory";
 import { formatCaptureTime } from "@/lib/domain/format-time";
 import { FragmentPrivacyControls } from "@/components/fragment-privacy-controls";
@@ -248,11 +248,79 @@ function MomentReviewControls({
   );
 }
 
+function StoryReviewControls({
+  groupId,
+  story,
+  onReview,
+}: {
+  groupId: string;
+  story: MemberStory;
+  onReview: (story: MemberStory) => void;
+}) {
+  const [pending, setPending] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  if (story.status !== "candidate") return null;
+
+  async function review(action: "confirm" | "reject") {
+    if (!window.confirm(
+      action === "confirm"
+        ? "Confirm this recurring Story connection based on its cited Moments?"
+        : "Reject this Story connection?",
+    )) return;
+    setPending(true);
+    setMessage(null);
+    try {
+      const response = await fetch(`/api/groups/${groupId}/stories/${story.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, expectedRevision: story.revision }),
+      });
+      const result = await response.json() as { story?: MemberStory; error?: string };
+      if (!response.ok || !result.story) {
+        setMessage(result.error ?? "Could not save the Story review.");
+        return;
+      }
+      onReview(result.story);
+      setMessage("Story review saved.");
+    } catch {
+      setMessage("Could not reach the Story review service.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  return (
+    <div className="moment-review">
+      <div className="action-row">
+        <button
+          className="primary-button"
+          type="button"
+          disabled={pending}
+          onClick={() => void review("confirm")}
+        >
+          Confirm story
+        </button>
+        <button
+          className="text-button danger-button"
+          type="button"
+          disabled={pending}
+          onClick={() => void review("reject")}
+        >
+          Reject
+        </button>
+      </div>
+      {message && <p className="privacy-status" role="status">{message}</p>}
+    </div>
+  );
+}
+
 export function GroupDetail({
   groupId,
   groupName,
   initialFragments,
   initialMoments,
+  initialStories,
+  initialStoryJobIds,
   currentUserId,
   memberRole,
 }: {
@@ -260,17 +328,23 @@ export function GroupDetail({
   groupName: string;
   initialFragments: GroupFragmentView[];
   initialMoments: MemberMoment[];
+  initialStories: MemberStory[];
+  initialStoryJobIds: string[];
   currentUserId: string;
   memberRole: "owner" | "admin" | "member";
 }) {
   const [fragments, setFragments] = useState(initialFragments);
   const [moments, setMoments] = useState(initialMoments);
+  const [stories, setStories] = useState(initialStories);
   const [groupDeletionPending, setGroupDeletionPending] = useState(false);
   const [groupDeletionRequesting, setGroupDeletionRequesting] = useState(false);
   const [groupDeletionMessage, setGroupDeletionMessage] = useState<string | null>(null);
   const [reconstructingFragmentId, setReconstructingFragmentId] = useState<string | null>(null);
   const [momentJobs, setMomentJobs] = useState<Array<{ jobId: string; fragmentId: string }>>([]);
   const [reconstructionMessage, setReconstructionMessage] = useState<string | null>(null);
+  const [storyJobs, setStoryJobs] = useState(initialStoryJobIds);
+  const [storyMessage, setStoryMessage] = useState<string | null>(null);
+  const [requestingStories, setRequestingStories] = useState(false);
   const [legacyMediaCleanupRequired, setLegacyMediaCleanupRequired] = useState(
     initialFragments.some((fragment) =>
       fragment.source === "upload" &&
@@ -430,6 +504,58 @@ export function GroupDetail({
     };
   }, [groupId, momentJobs]);
 
+  useEffect(() => {
+    if (!storyJobs.length) return;
+    let cancelled = false;
+    let requestInFlight = false;
+    const interval = window.setInterval(async () => {
+      if (requestInFlight) return;
+      requestInFlight = true;
+      try {
+        await Promise.all(storyJobs.map(async (jobId) => {
+          const response = await fetch(
+            `/api/groups/${groupId}/stories/jobs/${encodeURIComponent(jobId)}`,
+            { cache: "no-store" },
+          );
+          const result = await response.json() as {
+            status?: string;
+            outcome?: "candidate" | "insufficient_evidence";
+            story?: MemberStory;
+            error?: string;
+          };
+          if (cancelled) return;
+          if (!response.ok) {
+            setStoryMessage(result.error ?? "Could not check the Story reconstruction job.");
+            setStoryJobs((current) => current.filter((item) => item !== jobId));
+          } else if (result.status === "failed") {
+            setStoryMessage("Story reconstruction failed. You can request another attempt.");
+            setStoryJobs((current) => current.filter((item) => item !== jobId));
+          } else if (result.status === "succeeded") {
+            if (result.outcome === "candidate" && result.story) {
+              const story = result.story;
+              setStories((current) => [
+                story,
+                ...current.filter((item) => item.id !== story.id),
+              ]);
+              setStoryMessage("A recurring Story connection is ready.");
+            } else {
+              setStoryMessage("There is not enough supported evidence to suggest a Story connection.");
+            }
+            setStoryJobs((current) => current.filter((item) => item !== jobId));
+          }
+        }));
+      } catch {
+        if (!cancelled) setStoryMessage("Could not reach the Story reconstruction service.");
+      } finally {
+        requestInFlight = false;
+      }
+    }, 2000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [groupId, storyJobs]);
+
   async function requestGroupDeletion() {
     if (!window.confirm("Mark this group for deletion and block further access?")) return;
     setGroupDeletionRequesting(true);
@@ -506,6 +632,28 @@ export function GroupDetail({
     }
   }
 
+  async function findStoryConnections() {
+    setRequestingStories(true);
+    setStoryMessage(null);
+    try {
+      const response = await fetch(`/api/groups/${groupId}/stories`, {
+        method: "POST",
+        headers: { "Idempotency-Key": window.crypto.randomUUID() },
+      });
+      const result = await response.json() as { jobId?: string; error?: string };
+      if (!response.ok || !result.jobId) {
+        setStoryMessage(result.error ?? "Could not request Story reconstruction.");
+        return;
+      }
+      setStoryJobs((current) => [...new Set([...current, result.jobId!])]);
+      setStoryMessage("Story reconstruction queued in the background.");
+    } catch {
+      setStoryMessage("Could not reach the Story reconstruction service.");
+    } finally {
+      setRequestingStories(false);
+    }
+  }
+
   function reviewMoment(sourceMomentId: string, updatedMoment: MemberMoment) {
     setMoments((current) => {
       const remaining = current.filter((item) => item.id !== sourceMomentId && item.id !== updatedMoment.id);
@@ -513,6 +661,10 @@ export function GroupDetail({
         ? [updatedMoment, ...remaining]
         : remaining;
     });
+    setStories((current) => current.filter((story) =>
+      !story.momentIds.includes(sourceMomentId) &&
+      !story.momentIds.includes(updatedMoment.id),
+    ));
   }
 
   async function setGroupMemoryEnabledByAdmin(enabled: boolean) {
@@ -607,6 +759,7 @@ export function GroupDetail({
           <a href="#add-fragment">Add a fragment <span aria-hidden="true">+</span></a>
           <a href="#fragments">Fragments <span>{fragments.length.toString().padStart(2, "0")}</span></a>
           <a href="#moments">Moments <span>{moments.length.toString().padStart(2, "0")}</span></a>
+          <a href="#stories">Stories <span>{stories.length.toString().padStart(2, "0")}</span></a>
           <a href="#group-memory">Group memory</a>
           {(memberRole === "owner" || memberRole === "admin") && (
             <a href="#invite-people">Invite people</a>
@@ -798,6 +951,9 @@ export function GroupDetail({
                         setMoments((current) => current.filter((moment) =>
                           !moment.evidence.some((item) => item.fragmentId === update.fragmentId),
                         ));
+                        setStories((current) => current.filter((story) =>
+                          !story.evidence.some((item) => item.fragmentIds.includes(update.fragmentId)),
+                        ));
                       }
                     }}
                     onDeleted={(fragmentId) => {
@@ -812,6 +968,9 @@ export function GroupDetail({
                       setFragments((current) => current.filter((item) => item.id !== fragmentId));
                       setMoments((current) => current.filter((moment) =>
                         !moment.evidence.some((item) => item.fragmentId === fragmentId),
+                      ));
+                      setStories((current) => current.filter((story) =>
+                        !story.evidence.some((item) => item.fragmentIds.includes(fragmentId)),
                       ));
                     }}
                   />
@@ -963,6 +1122,68 @@ export function GroupDetail({
               </article>
             ))}
             {!moments.length && <p className="empty-moment">No reconstructed moments are ready yet.</p>}
+          </div>
+          <div className="moment-panel" id="stories">
+            <div className="section-head">
+              <div><p className="eyebrow">PATTERNS ACROSS CONFIRMED MOMENTS</p><h2>Stories</h2></div>
+              <button
+                className="text-button"
+                type="button"
+                disabled={
+                  requestingStories ||
+                  storyJobs.length > 0 ||
+                  moments.filter((moment) => moment.status === "confirmed").length < 2
+                }
+                onClick={() => void findStoryConnections()}
+              >
+                {requestingStories || storyJobs.length > 0
+                  ? "Finding connections…"
+                  : moments.filter((moment) => moment.status === "confirmed").length < 2
+                    ? "Confirm two Moments first"
+                    : "Find story connections"}
+              </button>
+            </div>
+            <p className="privacy-status">
+              Gemma compares only confirmed Moments and their eligible, group-visible source observations.
+              Each connection stays a hypothesis until a member confirms it.
+            </p>
+            {storyMessage && <p className="privacy-status" role="status">{storyMessage}</p>}
+            {stories.map((story) => (
+              <article className="group-moment" key={story.id}>
+                <div className="moment-card-head">
+                  <span className={`moment-status uncertainty-${story.uncertaintyLabel}`}>
+                    {story.uncertaintyLabel}
+                  </span>
+                  <span className="moment-state">
+                    {story.status === "candidate" ? "Awaiting your review" : story.status}
+                  </span>
+                </div>
+                <h3>{story.title}</h3>
+                <p className="moment-card-summary">{story.summary}</p>
+                <ol className="evidence-list" aria-label={`Evidence for Story ${story.title}`}>
+                  {story.evidence.map((item) => {
+                    const sourceMoment = moments.find((moment) => moment.id === item.momentId);
+                    return (
+                      <li key={item.momentId}>
+                        <strong>{sourceMoment?.title ?? "Confirmed moment"}</strong>
+                        <p>{sourceMoment?.summary ?? "This moment is no longer visible."}</p>
+                        <span>Connection: {item.relationship.replaceAll("_", " ")}</span>
+                      </li>
+                    );
+                  })}
+                </ol>
+                <StoryReviewControls
+                  groupId={groupId}
+                  story={story}
+                  onReview={(updated) => setStories((current) =>
+                    updated.status === "rejected"
+                      ? current.filter((item) => item.id !== updated.id)
+                      : current.map((item) => item.id === updated.id ? updated : item),
+                  )}
+                />
+              </article>
+            ))}
+            {!stories.length && <p className="empty-moment">No recurring Story connections are ready yet.</p>}
           </div>
         </section>
       )}

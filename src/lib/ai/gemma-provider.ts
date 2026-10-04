@@ -11,12 +11,15 @@ export interface StructuredGenerationInput {
   contextPacket: Record<string, unknown>;
   responseSchema: Record<string, unknown>;
   images?: Uint8Array[];
+  think?: boolean;
 }
 
 export interface GemmaService {
   readonly modelVersion: string;
   generateStructured(input: StructuredGenerationInput): Promise<Record<string, unknown>>;
 }
+
+export type GemmaRuntime = "local" | "render";
 
 export interface GemmaInferenceMetrics {
   model: string;
@@ -36,28 +39,33 @@ export class GemmaProviderError extends Error {
   }
 }
 
-function defaultConfig(defaultHost: string): GemmaConfig {
-  let baseUrl = process.env.OLLAMA_HOST ?? defaultHost;
+type RuntimeEnvironment = Readonly<Record<string, string | undefined>>;
+
+function defaultConfig(
+  defaultHost: string,
+  environment: RuntimeEnvironment = process.env,
+): GemmaConfig {
+  let baseUrl = environment.OLLAMA_HOST ?? defaultHost;
   if (!baseUrl.startsWith("http://") && !baseUrl.startsWith("https://")) {
     baseUrl = `http://${baseUrl}`;
   }
-  const configuredTimeout = Number(process.env.GEMMA_TIMEOUT_MS ?? 300_000);
+  const configuredTimeout = Number(environment.GEMMA_TIMEOUT_MS ?? 300_000);
   if (!Number.isFinite(configuredTimeout) || configuredTimeout <= 0) {
     throw new GemmaProviderError("GEMMA_TIMEOUT_MS must be a positive number");
   }
   return {
     baseUrl: baseUrl.replace(/\/$/, ""),
-    model: process.env.GEMMA_MODEL ?? "gemma4:e2b-it-q4_K_M",
+    model: environment.GEMMA_MODEL ?? "gemma4:e2b",
     timeoutMs: configuredTimeout,
   };
 }
 
-function renderConfig(): GemmaConfig {
-  const host = process.env.OLLAMA_HOST?.trim();
+function renderConfig(environment: RuntimeEnvironment = process.env): GemmaConfig {
+  const host = environment.OLLAMA_HOST?.trim();
   if (!host) {
     throw new GemmaProviderError("OLLAMA_HOST must point to the Render private Gemma service");
   }
-  return defaultConfig(host);
+  return defaultConfig(host, environment);
 }
 
 function isLoopbackHost(hostname: string): boolean {
@@ -69,7 +77,7 @@ function isLoopbackHost(hostname: string): boolean {
     /^127(?:\.\d{1,3}){3}$/.test(normalized);
 }
 
-export class OllamaGemmaProvider implements GemmaService {
+export class OllamaGemmaAdapter implements GemmaService {
   constructor(
     private readonly config = defaultConfig("http://localhost:11434"),
     private readonly fetcher: typeof fetch = fetch,
@@ -118,12 +126,13 @@ export class OllamaGemmaProvider implements GemmaService {
             userMessage,
           ],
           format: input.responseSchema,
-          options: { temperature: 0 },
+          think: input.think ?? false,
+          options: { temperature: 0, num_ctx: 4096, num_predict: 2048 },
           stream: false,
         }),
       });
     } catch (error) {
-      throw new GemmaProviderError("Could not reach the local Ollama service", {
+      throw new GemmaProviderError("Could not reach the configured Gemma runtime", {
         cause: error,
       });
     }
@@ -190,7 +199,7 @@ export class OllamaGemmaProvider implements GemmaService {
   }
 }
 
-export class LocalGemmaAdapter extends OllamaGemmaProvider {
+export class LocalGemmaAdapter extends OllamaGemmaAdapter {
   constructor(
     config = defaultConfig("http://localhost:11434"),
     fetcher: typeof fetch = fetch,
@@ -200,7 +209,7 @@ export class LocalGemmaAdapter extends OllamaGemmaProvider {
   }
 }
 
-export class RenderGemmaAdapter extends OllamaGemmaProvider {
+export class RenderGemmaAdapter extends OllamaGemmaAdapter {
   constructor(
     config = renderConfig(),
     fetcher: typeof fetch = fetch,
@@ -222,17 +231,27 @@ export class RenderGemmaAdapter extends OllamaGemmaProvider {
   }
 }
 
-export function createGemmaService(): GemmaService {
-  const runtime = process.env.GEMMA_RUNTIME ??
-    (process.env.NODE_ENV === "production" ? "render" : "local");
-  const reportMetrics: GemmaMetricReporter = (metrics) => {
+export function createGemmaService(
+  environment: RuntimeEnvironment = process.env,
+  fetcher: typeof fetch = fetch,
+  reportMetrics: GemmaMetricReporter = (metrics) => {
     console.info("[gemma] inference metrics", metrics);
-  };
+  },
+): GemmaService {
+  const runtime = environment.GEMMA_RUNTIME ??
+    (environment.NODE_ENV === "production" ? "render" : "local");
+  if (environment.NODE_ENV === "production" && runtime !== "render") {
+    throw new GemmaProviderError("Production Gemma processing must use the Render runtime");
+  }
   if (runtime === "local") {
-    return new LocalGemmaAdapter(defaultConfig("http://localhost:11434"), fetch, reportMetrics);
+    return new LocalGemmaAdapter(
+      defaultConfig("http://localhost:11434", environment),
+      fetcher,
+      reportMetrics,
+    );
   }
   if (runtime === "render") {
-    return new RenderGemmaAdapter(renderConfig(), fetch, reportMetrics);
+    return new RenderGemmaAdapter(renderConfig(environment), fetcher, reportMetrics);
   }
   throw new GemmaProviderError("GEMMA_RUNTIME must be either local or render");
 }

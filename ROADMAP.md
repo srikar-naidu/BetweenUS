@@ -60,7 +60,7 @@ Examples:
 
 - memory archaeology across long time spans
 - group-specific recurring joke detection
-- longer-horizon story discovery
+- scheduled Story refresh after new confirmed Moments
 - stronger multimodal extraction experiments
 - additional Tinker training iterations only if the bounded MVP experiment shows a measurable need
 - TabPFN experiment on aggregated, non-identifying activity patterns after enough labeled moments exist

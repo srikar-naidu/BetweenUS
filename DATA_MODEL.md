@@ -177,10 +177,36 @@ Responsibilities:
   "title": "string",
   "summary": "string",
   "confidence": 0.0,
-  "uncertainty_label": "confirmed|likely|possible|unknown",
-  "start_time": "datetime|null",
-  "end_time": "datetime|null",
+  "uncertainty_label": "possible|confirmed",
+  "uncertainty_reason": "string",
+  "status": "candidate|confirmed|rejected",
+  "start_time": "datetime",
+  "end_time": "datetime",
   "moment_ids": ["string"],
+  "reconstruction_version": "string",
+  "model_version": "string",
+  "source_key": "sha256 of Moment IDs, revisions, timestamps, and evidence",
+  "evidence": [
+    {
+      "moment_id": "confirmed Moment ID",
+      "moment_revision": 0,
+      "relationship": "shared_people|same_location|recurring_theme|timeline_connection",
+      "fragment_ids": ["eligible source Fragment ID"],
+      "fragment_source_digests": [
+        { "fragment_id": "eligible source Fragment ID", "source_content_sha256": "sha256" }
+      ]
+    }
+  ],
+  "review_history": [
+    {
+      "actor_user_id": "string",
+      "action": "confirm|reject",
+      "occurred_at": "datetime",
+      "before_status": "candidate",
+      "after_status": "confirmed|rejected"
+    }
+  ],
+  "revision": 0,
   "created_at": "datetime",
   "updated_at": "datetime"
 }
@@ -189,7 +215,28 @@ Responsibilities:
 Responsibilities:
 
 - recurring pattern across multiple moments
-- higher-level episodic memory
+- higher-level episodic memory; starts as a possible candidate and requires member confirmation
+- evidence links back through confirmed Moments to active, group-visible, AI-consented source Fragments
+
+## StoryReconstructionJob
+
+```json
+{
+  "id": "string",
+  "group_id": "string",
+  "requester_user_id": "string",
+  "request_id": "uuid",
+  "status": "queued|running|succeeded|failed",
+  "workflow_id": "string|null",
+  "story_id": "string|null",
+  "outcome": "candidate|insufficient_evidence|null",
+  "error_category": "string|null",
+  "created_at": "datetime",
+  "updated_at": "datetime"
+}
+```
+
+The group/request UUID pair is unique for idempotent submission. The Temporal workflow carries only opaque group, requester, and job IDs; job records never store prompts or model responses.
 
 ## Entity
 

@@ -8,6 +8,7 @@ import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
 import { disableGroupBackboard } from "@/lib/pipeline/group-backboard-memory";
 import { MongoVoiceStorage } from "@/lib/repositories/mongodb-voice-storage";
 import { MongoVoiceRepository } from "@/lib/repositories/mongodb-voice-repository";
+import { MongoStoryRepository } from "@/lib/repositories/mongodb-story-repository";
 import { isManagedGroupMediaStorageUri, MongoGroupMediaStorage } from "@/lib/repositories/mongodb-group-media-storage";
 
 export const runtime = "nodejs";
@@ -33,6 +34,7 @@ export async function DELETE(
       requestedByUserId: session.user.id,
     });
     if (!requested) return Response.json({ error: "Group not found" }, { status: 404 });
+    await new MongoStoryRepository(database).deleteGroup(groupId);
     if (process.env.TIGER_DATABASE_URL) {
       await new TigerDataFragmentSearch().removeGroupFragments(groupId);
     }
@@ -65,6 +67,7 @@ export async function DELETE(
     }
     await new MongoVoiceRepository(database).deleteGroupTranscripts(groupId);
     await ingestionRepository.completeGroupDeletionIfNoPendingFragments(groupId);
+    await new MongoStoryRepository(database).deleteGroup(groupId);
     return Response.json({ status: "deletion_pending", legacyMediaCleanupRequired }, { status: 202 });
   } catch (error) {
     return apiErrorResponse(error);

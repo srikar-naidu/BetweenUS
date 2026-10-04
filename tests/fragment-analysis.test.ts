@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  FRAGMENT_ANALYSIS_VERSION,
   fragmentAnalysisResponseSchema,
   FragmentAnalysisValidationError,
   validateFragmentAnalysisOutput,
@@ -48,10 +49,10 @@ const validOutput = {
 
 test("fragment analysis validates source quotes and preserves provenance fields", () => {
   const analysis = validateFragmentAnalysisOutput(validOutput, fragmentId, sourceText);
-  assert.equal(analysis.analysisVersion, "fragment-analysis-v1");
+  assert.equal(analysis.analysisVersion, FRAGMENT_ANALYSIS_VERSION);
   assert.equal(analysis.fragmentId, fragmentId);
   assert.equal(analysis.uncertainty.status, "possible");
-  assert.equal(analysis.observedFacts[0].evidence, "at the cafeteria");
+  assert.equal(analysis.observedFacts[0].evidence.evidence, "at the cafeteria");
   assert.deepEqual(analysis.evidenceFragmentIds, [fragmentId]);
 });
 
@@ -85,7 +86,7 @@ test("fragment analysis rejects invented IDs, unsupported source quotes, and cer
       ...validOutput,
       observed_facts: [{ ...validOutput.observed_facts[0], value: "airport" }],
     }, fragmentId, sourceText),
-    /not supported by its evidence/,
+    /not present in the source fragment/,
   );
   assert.throws(
     () => validateFragmentAnalysisOutput({ ...validOutput, summary: "They ate lunch together." }, fragmentId, sourceText),
@@ -100,8 +101,20 @@ test("fragment analysis rejects invented IDs, unsupported source quotes, and cer
       ...validOutput,
       uncertainty: { status: "likely", reason: "Certain" },
     }, fragmentId, sourceText),
-    /uncertainty status inconsistent/,
+    /unsupported uncertainty status/,
   );
+});
+
+test("fragment uncertainty is derived from validated evidence, not the model's certainty label", () => {
+  const analysis = validateFragmentAnalysisOutput({
+    ...validOutput,
+    uncertainty: { status: "unknown", reason: "The model's label disagrees with its evidence." },
+  }, fragmentId, sourceText);
+
+  assert.deepEqual(analysis.uncertainty, {
+    status: "possible",
+    reason: "The fragment contains directly cited observations, but their broader meaning remains uncertain.",
+  });
 });
 
 test("fragment-analysis schema binds evidence to its source and disallows confirmed output", () => {
