@@ -1,13 +1,17 @@
 import type { Db } from "mongodb";
 import { createHash } from "node:crypto";
 import { FRAGMENT_ANALYSIS_VERSION } from "@/lib/ai/fragment-analysis";
-import { fragmentAnalysisSearchText } from "@/lib/ai/fragment-analysis";
+import {
+  fragmentAnalysisSearchText,
+  fragmentSourceDigest,
+  type EvidenceReference,
+} from "@/lib/ai/fragment-analysis";
 import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-fragment-analysis-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { MAX_CONTEXT_CANDIDATES } from "@/lib/retrieval/ranking";
 import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
 import { searchConfirmedGroupMemories } from "@/lib/pipeline/group-backboard-memory";
-import { hasApprovedTextSource } from "@/lib/domain/memory";
+import { hasAnalyzableFragmentSource } from "@/lib/domain/memory";
 
 export interface ContextPacketFragment {
   fragment_id: string;
@@ -18,16 +22,17 @@ export interface ContextPacketFragment {
   facts: Array<{
     type: string;
     value: string;
-    evidence: string;
-    source: "text" | "voice_transcript";
+    evidence: EvidenceReference;
+    confidence: number;
   }>;
+  review_required: boolean;
   retrieval_score: number;
   matched_signals: string[];
-  source_type: "text" | "voice";
+  source_type: "text" | "voice" | "image" | "video";
 }
 
 export interface FragmentContextPacket {
-  version: "context-packet-v1";
+  version: "context-packet-v2";
   group_id: string;
   anchor_fragment_id: string;
   time_window: { start: string; end: string };
@@ -65,10 +70,9 @@ export async function buildFragmentContextPacket(input: {
   if (
     !anchor ||
     anchor.deletionState !== "active" ||
-    !hasApprovedTextSource(anchor) ||
+    !hasAnalyzableFragmentSource(anchor) ||
     anchor.visibility !== "group" ||
-    !anchor.aiProcessingConsent ||
-    !anchor.textContent
+    !anchor.aiProcessingConsent
   ) {
     throw new Error("Anchor fragment is not eligible for group reconstruction");
   }
@@ -78,8 +82,7 @@ export async function buildFragmentContextPacket(input: {
   const analyses = new MongoFragmentAnalysisRepository(input.database);
   const anchorAnalysis = await analyses.find(input.groupId, anchor.id, FRAGMENT_ANALYSIS_VERSION);
   if (!anchorAnalysis) throw new Error("Anchor fragment has no current analysis");
-  const anchorChecksum = createHash("sha256").update(anchor.textContent).digest("hex");
-  if (anchorAnalysis.sourceTextSha256 !== anchorChecksum) {
+  if (anchorAnalysis.sourceContentSha256 !== fragmentSourceDigest(anchor)) {
     throw new Error("Anchor fragment analysis is stale");
   }
   const knownMomentIds = await memory.findLinkedMomentIds(input.groupId, anchor.id);
@@ -127,15 +130,20 @@ export async function buildFragmentContextPacket(input: {
     captured_at: fragment.capturedAt.toISOString(),
     summary: analysis.summary.slice(0, 500),
     entities: analysis.entities.slice(0, 20),
-    facts: analysis.observedFacts.slice(0, 8).map(({ type, value, evidence, source }) => ({
+    facts: analysis.observedFacts.slice(0, 8).map(({ type, value, evidence, confidence }) => ({
       type,
       value: value.slice(0, 240),
-      evidence: evidence.slice(0, 240),
-      source,
+      evidence: { ...evidence, evidence: evidence.evidence.slice(0, 240) },
+      confidence,
     })),
+    review_required: analysis.requiresReview,
     retrieval_score: retrievalScore,
     matched_signals: matchedSignals,
-    source_type: fragment.type === "voice" ? "voice" : "text",
+    source_type: fragment.type === "voice"
+      ? "voice"
+      : fragment.type === "image" || fragment.type === "video"
+        ? fragment.type
+        : "text",
   });
 
   const candidateFragments = [
@@ -146,11 +154,9 @@ export async function buildFragmentContextPacket(input: {
       if (
         !fragment ||
         !analysis ||
-        !hasApprovedTextSource(fragment) ||
-        !fragment.textContent
+        !hasAnalyzableFragmentSource(fragment)
       ) return [];
-      const sourceChecksum = createHash("sha256").update(fragment.textContent).digest("hex");
-      if (analysis.sourceTextSha256 !== sourceChecksum) return [];
+      if (analysis.sourceContentSha256 !== fragmentSourceDigest(fragment)) return [];
       return [toContextFragment(fragment, analysis, candidate.retrievalScore, candidate.matchedSignals)];
     }),
   ].slice(0, MAX_CONTEXT_CANDIDATES);
@@ -162,7 +168,7 @@ export async function buildFragmentContextPacket(input: {
   });
 
   return {
-    version: "context-packet-v1",
+    version: "context-packet-v2",
     group_id: input.groupId,
     anchor_fragment_id: anchor.id,
     time_window: {

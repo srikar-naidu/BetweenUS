@@ -20,6 +20,15 @@ const runActivity = proxyActivities<typeof activities>({
   },
 });
 
+const inferenceActivity = proxyActivities<typeof activities>({
+  startToCloseTimeout: "6 minutes",
+  retry: {
+    initialInterval: "5 seconds",
+    maximumInterval: "30 seconds",
+    maximumAttempts: 3,
+  },
+});
+
 const reconstructionActivity = proxyActivities<typeof activities>({
   startToCloseTimeout: "10 minutes",
   retry: {
@@ -78,16 +87,16 @@ export async function processFragmentWorkflow(input: FragmentWorkflowInput): Pro
       fragmentStatus: "processing",
     });
     await runActivity.verifyIngestedFragment({ groupId: input.groupId, fragmentId: input.fragmentId });
-    const analysisId = await runActivity.analyzeTextFragment({
+    const analysis = await inferenceActivity.analyzeFragment({
       groupId: input.groupId,
       fragmentId: input.fragmentId,
     });
     await runActivity.markProcessingJobSucceeded({
       jobId: input.jobId,
-      outputRef: analysisId ?? input.fragmentId,
+      outputRef: analysis?.analysisId ?? input.fragmentId,
       groupId: input.groupId,
       fragmentId: input.fragmentId,
-      fragmentStatus: "processed",
+      fragmentStatus: analysis?.requiresReview ? "needs_review" : "processed",
     });
   } catch (error) {
     await runActivity.markProcessingJobFailed({

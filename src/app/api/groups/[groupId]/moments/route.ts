@@ -9,7 +9,7 @@ import { TemporalConfigurationError, getTemporalClient, startMomentReconstructio
 import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-fragment-analysis-repository";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
-import { hasApprovedTextSource } from "@/lib/domain/memory";
+import { hasAnalyzableFragmentSource } from "@/lib/domain/memory";
 
 export const runtime = "nodejs";
 
@@ -46,11 +46,11 @@ export async function POST(
     const anchor = await memory.findFragmentVisibleToMember(groupId, anchorFragmentId, session.user.id);
     if (
       !anchor ||
-      !hasApprovedTextSource(anchor) ||
+      !hasAnalyzableFragmentSource(anchor) ||
       anchor.visibility !== "group" ||
       !anchor.aiProcessingConsent ||
       anchor.deletionState !== "active" ||
-      anchor.status !== "processed"
+      !["processed", "needs_review"].includes(anchor.status)
     ) {
       return Response.json({ error: "Eligible anchor fragment not found" }, { status: 404 });
     }

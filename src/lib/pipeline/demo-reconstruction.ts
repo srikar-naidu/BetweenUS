@@ -6,7 +6,7 @@ import type {
 } from "@/lib/domain/memory";
 import { getMongoDatabase } from "@/lib/db/mongodb";
 import {
-  OllamaGemmaProvider,
+  createGemmaService,
   type StructuredGenerationInput,
 } from "@/lib/ai/gemma-provider";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
@@ -426,7 +426,7 @@ export async function runDemoReconstruction(options: {
   reconstructor?: Reconstructor;
 } = {}): Promise<DemoReconstructionResult> {
   const adapters = options.adapters ?? (await getAdapters());
-  const reconstructor = options.reconstructor ?? new OllamaGemmaProvider();
+  const reconstructor = options.reconstructor ?? createGemmaService();
   const anchor = sampleFragments[1];
   const windowStart = new Date(anchor.capturedAt.getTime() - 20 * 60_000);
   const windowEnd = new Date(anchor.capturedAt.getTime() + 20 * 60_000);

@@ -17,15 +17,23 @@ const validOutput = {
       type: "place",
       value: "cafeteria",
       confidence: 0.98,
-      source: "text",
-      evidence: "at the cafeteria",
+      evidence: {
+        fragment_id: fragmentId,
+        modality: "text",
+        locator: null,
+        evidence: "at the cafeteria",
+      },
     },
     {
       type: "activity",
       value: "practice",
       confidence: 0.91,
-      source: "text",
-      evidence: "after practice",
+      evidence: {
+        fragment_id: fragmentId,
+        modality: "text",
+        locator: null,
+        evidence: "after practice",
+      },
     },
   ],
   people: [],
@@ -55,14 +63,20 @@ test("fragment analysis rejects invented IDs, unsupported source quotes, and cer
   assert.throws(
     () => validateFragmentAnalysisOutput({
       ...validOutput,
-      observed_facts: [{ ...validOutput.observed_facts[0], evidence: "at the airport" }],
+      observed_facts: [{
+        ...validOutput.observed_facts[0],
+        evidence: { ...validOutput.observed_facts[0].evidence, evidence: "at the airport" },
+      }],
     }, fragmentId, sourceText),
     /not present in the source fragment/,
   );
   assert.throws(
     () => validateFragmentAnalysisOutput({
       ...validOutput,
-      observed_facts: [{ ...validOutput.observed_facts[0], evidence: "At the cafeteria" }],
+      observed_facts: [{
+        ...validOutput.observed_facts[0],
+        evidence: { ...validOutput.observed_facts[0].evidence, evidence: "At the cafeteria" },
+      }],
     }, fragmentId, sourceText),
     /not present in the source fragment/,
   );

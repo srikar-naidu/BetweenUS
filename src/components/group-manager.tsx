@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
 import { authClient } from "@/lib/auth-client";
+import { extractInvitationId } from "@/lib/auth/invitation-link";
 
 export interface GroupSummary {
   id: string;
@@ -29,6 +30,8 @@ export function GroupManager({ initialGroups }: Props) {
   const [inviteErrors, setInviteErrors] = useState<Record<string, string>>({});
   const [inviteMessages, setInviteMessages] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
+  const [invitationInput, setInvitationInput] = useState("");
+  const [joinError, setJoinError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function createGroup(event: FormEvent<HTMLFormElement>) {
@@ -81,6 +84,17 @@ export function GroupManager({ initialGroups }: Props) {
     });
   }
 
+  function joinWithInvitation(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const invitationId = extractInvitationId(invitationInput);
+    if (!invitationId) {
+      setJoinError("Paste a valid private-space invite link or invitation code.");
+      return;
+    }
+    setJoinError(null);
+    router.push(`/invite/${encodeURIComponent(invitationId)}`);
+  }
+
   return (
     <div className="groups-layout">
       <section className="groups-column" aria-labelledby="groups-heading">
@@ -88,6 +102,30 @@ export function GroupManager({ initialGroups }: Props) {
           <h2 id="groups-heading">Your groups</h2>
           <span>{groups.length} {groups.length === 1 ? "space" : "spaces"}</span>
         </div>
+        <section className="join-space-panel" aria-labelledby="join-space-heading">
+          <div>
+            <span className="group-guide-kicker">INVITED TO A PRIVATE SPACE?</span>
+            <h3 id="join-space-heading">Join your people.</h3>
+            <p>Paste the private invite link or code you received. Only invited email addresses can join.</p>
+          </div>
+          <form className="join-space-form" onSubmit={joinWithInvitation}>
+            <label className="sr-only" htmlFor="space-invitation">Invite link or code</label>
+            <input
+              id="space-invitation"
+              autoComplete="off"
+              value={invitationInput}
+              placeholder="Paste invite link or code"
+              onChange={(event) => {
+                setInvitationInput(event.target.value);
+                setJoinError(null);
+              }}
+            />
+            <button className="secondary-button" type="submit">
+              Join with invite
+            </button>
+            {joinError && <p className="error-message" role="alert">{joinError}</p>}
+          </form>
+        </section>
         {groups.length ? (
           <ul className="group-list">
             {groups.map((group) => (
@@ -95,6 +133,9 @@ export function GroupManager({ initialGroups }: Props) {
                 <div>
                   <Link href={`/groups/${group.id}`} className="group-name">{group.name}</Link>
                   <p>{group.description || "Private memory space"}</p>
+                  <Link href={`/groups/${group.id}`} className="group-open-space">
+                    Open space <span aria-hidden="true">→</span>
+                  </Link>
                 </div>
                 {(group.memberRole === "owner" || group.memberRole === "admin") && (
                 <form onSubmit={(event) => inviteMember(event, group.id)} className="invite-form">

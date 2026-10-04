@@ -1043,6 +1043,58 @@ body {
 .group-name { font-size: clamp(23px, 3vw, 32px); }
 .group-name:hover { color: var(--forest); text-decoration-thickness: 2px; text-underline-offset: 4px; }
 .group-row p { color: #445b53; line-height: 1.5; }
+.group-open-space {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--forest);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+.group-open-space:hover { color: #a5483f; }
+.join-space-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, .8fr);
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 18px;
+  padding: 15px;
+  border: 2px solid var(--ink);
+  background: #f5edd3;
+  box-shadow: 4px 4px 0 #d1ac36;
+}
+.join-space-panel h3 {
+  margin: 5px 0;
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -.03em;
+}
+.join-space-panel p {
+  margin: 0;
+  color: #40574f;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.join-space-form { display: grid; gap: 8px; }
+.join-space-form input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 9px 11px;
+  border: 2px solid var(--ink);
+  border-radius: 0;
+  background: var(--paper-bright);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+}
+.join-space-form .secondary-button { min-height: 42px; }
+.join-space-form .error-message { margin: 0; }
 .create-group-panel {
   padding: 22px;
   border: 2px solid var(--ink);
@@ -1179,6 +1231,9 @@ body {
   .group-memory-settings { display: grid; }
   .group-memory-settings .text-button { justify-self: start; }
   .group-row { grid-template-columns: minmax(0, 1fr); gap: 13px; padding: 17px 13px; }
+  .join-space-panel { grid-template-columns: minmax(0, 1fr); gap: 13px; padding: 14px; }
+  .join-space-panel h3 { font-size: 25px; }
+  .join-space-form .secondary-button { width: 100%; }
   .create-group-panel { padding: 19px; border: 2px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); }
   .moment-evidence-review, .moment-merge { grid-template-columns: minmax(0, 1fr); }
   .moment-evidence-review .text-button, .moment-merge .text-button { min-height: 44px; }

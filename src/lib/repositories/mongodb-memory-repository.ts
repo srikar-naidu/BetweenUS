@@ -161,6 +161,12 @@ export class MongoMemoryRepository {
       $or: [
         { type: "text", source: "text" },
         { type: "voice", source: "upload", transcriptReviewedAt: { $type: "date" } },
+        {
+          type: { $in: ["image", "video"] },
+          source: "upload",
+          checksumSha256: { $type: "string" },
+          storageUri: { $type: "string" },
+        },
       ],
     }).toArray();
     return documents.map(asFragment);
@@ -234,6 +240,12 @@ export class MongoMemoryRepository {
       $or: [
         { type: "text", source: "text" },
         { type: "voice", source: "upload", transcriptReviewedAt: { $type: "date" } },
+        {
+          type: { $in: ["image", "video"] },
+          source: "upload",
+          checksumSha256: { $type: "string" },
+          storageUri: { $type: "string" },
+        },
       ],
       capturedAt: { $gte: startAt, $lte: endAt },
     };

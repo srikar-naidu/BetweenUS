@@ -9,7 +9,7 @@ export type FragmentType =
 
 export type FragmentVisibility = "private" | "group" | "restricted";
 export type FragmentSource = "upload" | "text" | "demo" | "legacy";
-export type FragmentStatus = "uploaded" | "processing" | "processed" | "rejected";
+export type FragmentStatus = "uploaded" | "processing" | "needs_review" | "processed" | "rejected";
 export type FragmentDeletionState = "active" | "pending" | "deleted";
 export type MomentStatus = "draft" | "candidate" | "confirmed" | "rejected" | "merged";
 export type UncertaintyLabel = "confirmed" | "likely" | "possible" | "unknown";
@@ -121,6 +121,19 @@ export function hasApprovedTextSource(
     reviewed &&
     typeof fragment.textContent === "string" &&
     fragment.textContent.trim().length > 0;
+}
+
+export function hasAnalyzableFragmentSource(
+  fragment: Pick<Fragment, "type" | "source" | "storageUri" | "checksumSha256" | "metadata"> &
+    Pick<Fragment, "textContent" | "transcriptReviewedAt">,
+): boolean {
+  if (hasApprovedTextSource(fragment)) return true;
+  return (fragment.type === "image" || fragment.type === "video") &&
+    fragment.source === "upload" &&
+    typeof fragment.storageUri === "string" &&
+    typeof fragment.checksumSha256 === "string" &&
+    /^[a-f0-9]{64}$/i.test(fragment.checksumSha256) &&
+    typeof fragment.metadata.mimeType === "string";
 }
 
 export interface NewFragment {

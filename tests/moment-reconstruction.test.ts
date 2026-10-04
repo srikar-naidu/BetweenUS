@@ -24,9 +24,15 @@ function contextFragment(input: {
     facts: input.facts ?? [{
       type: "place",
       value: "cafeteria",
-      evidence: "at the cafeteria",
-      source: "text",
+      evidence: {
+        fragmentId: input.id,
+        modality: "text",
+        locator: null,
+        evidence: "at the cafeteria",
+      },
+      confidence: 0.9,
     }],
+    review_required: false,
     retrieval_score: 10,
     matched_signals: ["temporal", "entity_overlap"],
     source_type: "text",
@@ -35,7 +41,7 @@ function contextFragment(input: {
 
 function packet(fragments: ContextPacketFragment[]): FragmentContextPacket {
   return {
-    version: "context-packet-v1",
+    version: "context-packet-v2",
     group_id: "group-a",
     anchor_fragment_id: fragments[0].fragment_id,
     time_window: {
@@ -96,7 +102,17 @@ test("moment reconstruction rejects invented IDs and unsupported relationship cl
       id: "fragment-b",
       author: "author-b",
       minutes: 5,
-      facts: [{ type: "activity", value: "practice", evidence: "after practice", source: "text" }],
+      facts: [{
+        type: "activity",
+        value: "practice",
+        evidence: {
+          fragmentId: "fragment-b",
+          modality: "text",
+          locator: null,
+          evidence: "after practice",
+        },
+        confidence: 0.9,
+      }],
       entities: ["practice"],
     }),
   ]);

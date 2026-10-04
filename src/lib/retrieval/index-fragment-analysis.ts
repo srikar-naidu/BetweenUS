@@ -1,8 +1,10 @@
-import { createHash } from "node:crypto";
 import type { Db } from "mongodb";
-import { hasApprovedTextSource } from "@/lib/domain/memory";
-import type { FragmentAnalysis } from "@/lib/ai/fragment-analysis";
-import { fragmentAnalysisSearchText } from "@/lib/ai/fragment-analysis";
+import { hasAnalyzableFragmentSource } from "@/lib/domain/memory";
+import {
+  fragmentAnalysisSearchText,
+  fragmentSourceDigest,
+  type FragmentAnalysis,
+} from "@/lib/ai/fragment-analysis";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
 
@@ -14,16 +16,14 @@ export async function indexEligibleFragmentAnalysis(
   const fragment = await repository.findFragmentById(analysis.groupId, analysis.fragmentId);
   if (
     !fragment ||
-    !hasApprovedTextSource(fragment) ||
+    !hasAnalyzableFragmentSource(fragment) ||
     fragment.deletionState !== "active" ||
-    !fragment.aiProcessingConsent ||
-    !fragment.textContent
+    !fragment.aiProcessingConsent
   ) {
     return false;
   }
-  const sourceTextSha256 = createHash("sha256").update(fragment.textContent).digest("hex");
-  if (sourceTextSha256 !== analysis.sourceTextSha256) {
-    throw new Error("Fragment text changed after its analysis was generated");
+  if (fragmentSourceDigest(fragment) !== analysis.sourceContentSha256) {
+    throw new Error("Fragment source changed after its analysis was generated");
   }
   if (fragment.visibility !== "group") return false;
 
@@ -43,11 +43,11 @@ export async function indexEligibleFragmentAnalysis(
   const current = await repository.findFragmentById(analysis.groupId, analysis.fragmentId);
   const remainsEligible =
     current !== null &&
-    hasApprovedTextSource(current) &&
+    hasAnalyzableFragmentSource(current) &&
     current.deletionState === "active" &&
     current.aiProcessingConsent &&
     current.visibility === "group" &&
-    current.textContent === fragment.textContent;
+    fragmentSourceDigest(current) === analysis.sourceContentSha256;
   if (!remainsEligible) {
     await retrieval.removeGroupVisibleFragment(analysis.groupId, analysis.fragmentId);
     return false;

@@ -58,6 +58,7 @@ function contextFragment(
     summary: fragment.semanticSummary,
     entities: fragment.entityKeys,
     facts: [],
+    review_required: false,
     retrieval_score: 1,
     matched_signals: ["synthetic-evaluation"],
     source_type: fragment.modality === "voice_transcript" ? "voice" : "text",
@@ -71,7 +72,7 @@ function packetFor(
   const fragments = fragmentIds.map((fragmentId) => contextFragment(scenario, fragmentId));
   const times = fragments.map((fragment) => Date.parse(fragment.captured_at));
   return {
-    version: "context-packet-v1",
+    version: "context-packet-v2",
     group_id: scenario.groupId,
     anchor_fragment_id: scenario.retrievalScenario.anchor.fragmentId,
     time_window: {

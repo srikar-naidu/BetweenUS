@@ -4,7 +4,7 @@ import { requireGroupMembership } from "@/lib/auth/group-access";
 import { FRAGMENT_ANALYSIS_VERSION } from "@/lib/ai/fragment-analysis";
 import { FragmentInputError, validateTextFragment } from "@/lib/ingestion/fragment-validation";
 import { getMongoDatabase } from "@/lib/db/mongodb";
-import { startFragmentWorkflow, getTemporalClient, TemporalConfigurationError } from "@/lib/processing/temporal-client";
+import { startFragmentWorkflow } from "@/lib/processing/temporal-client";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 
@@ -93,7 +93,6 @@ export async function POST(
         processingStatus: existingFragment.aiProcessingConsent ? existingJob?.status ?? null : null,
       }, { headers: { "Cache-Control": "no-store" } });
     }
-    if (input.aiProcessingConsent) await getTemporalClient();
     const processingVersion = input.aiProcessingConsent
       ? `${FRAGMENT_ANALYSIS_VERSION}-${Date.now()}`
       : FRAGMENT_ANALYSIS_VERSION;
@@ -149,9 +148,6 @@ export async function POST(
   } catch (error) {
     if (error instanceof FragmentInputError) {
       return Response.json({ error: error.message }, { status: 400 });
-    }
-    if (error instanceof TemporalConfigurationError) {
-      return Response.json({ error: "Processing is not configured on this server" }, { status: 503 });
     }
     return apiErrorResponse(error);
   }

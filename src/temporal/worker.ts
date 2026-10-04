@@ -52,7 +52,7 @@ function instrumentActivity<Input, Output>(
 const instrumentedActivities = {
   markProcessingJobStarted: instrumentActivity("job-status", activities.markProcessingJobStarted),
   verifyIngestedFragment: instrumentActivity("ingest", activities.verifyIngestedFragment),
-  analyzeTextFragment: instrumentActivity("ingest", activities.analyzeTextFragment),
+  analyzeFragment: instrumentActivity("ingest", activities.analyzeFragment),
   transcribeVoiceNote: instrumentActivity("transcription", activities.transcribeVoiceNote),
   reconstructMomentForFragment: instrumentActivity("reconstruction", activities.reconstructMomentForFragment),
   markProcessingJobSucceeded: instrumentActivity("job-status", activities.markProcessingJobSucceeded),

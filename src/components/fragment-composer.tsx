@@ -37,6 +37,7 @@ export function FragmentComposer({
   const mediaFileInput = useRef<HTMLInputElement>(null);
   const [mediaCaption, setMediaCaption] = useState("");
   const [mediaVisibility, setMediaVisibility] = useState<FragmentVisibility>("private");
+  const [mediaAiProcessingConsent, setMediaAiProcessingConsent] = useState(false);
   const [mediaSubmitting, setMediaSubmitting] = useState(false);
   const [mediaMessage, setMediaMessage] = useState<string | null>(null);
   const [capturedAt, setCapturedAt] = useState(localDateTimeValue);
@@ -164,6 +165,7 @@ export function FragmentComposer({
           "X-Captured-Time-Zone": Intl.DateTimeFormat().resolvedOptions().timeZone,
           "X-Fragment-Visibility": mediaVisibility,
           "X-Fragment-Caption": encodeURIComponent(mediaCaption),
+          "X-AI-Processing-Consent": String(mediaAiProcessingConsent),
         },
         body: mediaFile,
       });
@@ -173,9 +175,12 @@ export function FragmentComposer({
       setMediaFile(null);
       if (mediaFileInput.current) mediaFileInput.current.value = "";
       setMediaCaption("");
+      setMediaAiProcessingConsent(false);
       mediaIdempotencyKey.current = null;
       setMediaMessage(
-        `${isVideo ? "Video" : "Photo"} saved. It is not sent to AI and is only visible according to your privacy setting.`,
+        mediaAiProcessingConsent
+          ? `${isVideo ? "Video" : "Photo"} saved. Private Gemma analysis is ${result.fragment.processingJobStatus === "queued" ? "queued" : "not available yet"}; its observations remain tentative.`
+          : `${isVideo ? "Video" : "Photo"} saved without AI processing. It is only visible according to your privacy setting.`,
       );
     } catch (error) {
       setMediaMessage(error instanceof Error ? error.message : "Photo or video could not be saved.");
@@ -238,6 +243,7 @@ export function FragmentComposer({
             required
             onChange={(event) => {
               setMediaFile(event.target.files?.[0] ?? null);
+              setMediaAiProcessingConsent(false);
               mediaIdempotencyKey.current = null;
               setMediaMessage(null);
             }}
@@ -270,8 +276,21 @@ export function FragmentComposer({
             <option value="restricted">Restricted</option>
           </select>
         </label>
+        <label className="consent-control">
+          <input
+            type="checkbox"
+            checked={mediaAiProcessingConsent}
+            onChange={(event) => {
+              setMediaAiProcessingConsent(event.target.checked);
+              mediaIdempotencyKey.current = null;
+            }}
+          />
+          I consent to private Gemma processing for tentative observations
+        </label>
         <p className="privacy-status media-privacy-note">
-          Starts private. You choose when to share it. Photo and video posts are not processed by AI.
+          Off by default. If enabled, this photo or video is processed by Between Us&apos; private Gemma
+          runtime, not a third-party LLM. The model will not identify people. Observations are
+          suggestions, not verified facts. Voice audio has a separate transcription choice.
         </p>
         <button className="secondary-button" type="submit" disabled={mediaSubmitting || !mediaFile}>
           {mediaSubmitting ? "Uploading…" : "Post photo or video"}

@@ -329,7 +329,7 @@ export function GroupDetail({
 
   useEffect(() => {
     const activeFragments = fragments.filter((fragment) =>
-      fragment.source !== "upload" && (
+      fragment.aiProcessingConsent && (
         fragment.processingJobStatus === "queued" ||
         fragment.processingJobStatus === "running" ||
         fragment.processingJobStatus === "retrying"
@@ -349,10 +349,19 @@ export function GroupDetail({
             { cache: "no-store" },
           );
           if (!response.ok) return;
-          const result = await response.json() as { status?: GroupFragmentView["processingJobStatus"] };
+          const result = await response.json() as {
+            status?: GroupFragmentView["processingJobStatus"];
+            fragmentStatus?: GroupFragmentView["status"];
+          };
           if (!cancelled && "status" in result) {
             setFragments((current) => current.map((item) =>
-              item.id === fragment.id ? { ...item, processingJobStatus: result.status ?? null } : item,
+              item.id === fragment.id
+                ? {
+                    ...item,
+                    processingJobStatus: result.status ?? null,
+                    ...(result.fragmentStatus ? { status: result.fragmentStatus } : {}),
+                  }
+                : item,
             ));
           }
         }));
@@ -691,10 +700,12 @@ export function GroupDetail({
                       src={`/api/groups/${groupId}/fragments/${fragment.id}/audio`}
                     />
                   )}
-                  {hasApprovedTextSource(fragment) &&
+                  {((fragment.type === "image" || fragment.type === "video")
+                    ? fragment.mediaStorageAvailable === true
+                    : hasApprovedTextSource(fragment)) &&
                     fragment.visibility === "group" &&
                     fragment.aiProcessingConsent &&
-                    fragment.status === "processed" && (
+                    (fragment.status === "processed" || fragment.status === "needs_review") && (
                       <button
                         className="text-button"
                         type="button"
@@ -711,11 +722,26 @@ export function GroupDetail({
                             : "Reconstruct a moment"}
                       </button>
                     )}
-                  {fragment.processingJobStatus && (
-                    <p className="fragment-processing-status" role="status">Processing: {fragment.processingJobStatus}</p>
+                  {fragment.aiProcessingConsent && (
+                    <p className="fragment-processing-status" role="status">
+                      {fragment.status === "needs_review"
+                        ? "Gemma observations are ready for review; they are not verified facts."
+                        : fragment.processingJobStatus === "queued" ||
+                            fragment.processingJobStatus === "running" ||
+                            fragment.processingJobStatus === "retrying"
+                          ? `Private Gemma processing: ${fragment.processingJobStatus}.`
+                          : fragment.processingJobStatus === "failed" || fragment.status === "rejected"
+                            ? "Private Gemma processing failed. The original fragment is still saved."
+                            : fragment.status === "processed"
+                              ? "Private Gemma analysis is ready for reconstruction."
+                              : "Private Gemma processing is waiting to start."}
+                    </p>
                   )}
                   {fragment.processingJobStatus === "failed" &&
-                    (fragment.source !== "upload" || fragment.type === "voice") && (
+                    (fragment.source !== "upload" ||
+                      fragment.type === "voice" ||
+                      fragment.type === "image" ||
+                      fragment.type === "video") && (
                     <button className="text-button" type="button" onClick={() => void retryProcessing(fragment)}>
                       Retry processing
                     </button>
@@ -742,7 +768,10 @@ export function GroupDetail({
                       ((fragment.type !== "image" && fragment.type !== "video") ||
                         fragment.mediaStorageAvailable !== true)
                     }
-                    allowAiProcessing={fragment.type !== "image" && fragment.type !== "video"}
+                    allowAiProcessing={
+                      (fragment.type !== "image" && fragment.type !== "video") ||
+                      fragment.mediaStorageAvailable === true
+                    }
                     initialVisibility={fragment.visibility}
                     initialConsent={fragment.aiProcessingConsent}
                     canEditPrivacy={

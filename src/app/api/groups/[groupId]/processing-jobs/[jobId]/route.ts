@@ -5,7 +5,7 @@ import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { getTemporalClient, startFragmentWorkflow, TemporalConfigurationError } from "@/lib/processing/temporal-client";
-import { hasApprovedTextSource } from "@/lib/domain/memory";
+import { hasAnalyzableFragmentSource } from "@/lib/domain/memory";
 
 export const runtime = "nodejs";
 
@@ -26,9 +26,10 @@ export async function GET(
       fragment.deletionState !== "active" ||
       (fragment.visibility !== "group" && fragment.authorUserId !== session.user.id) ||
       (job.jobType === "reconstruct_moment" &&
-        (!hasApprovedTextSource(fragment) ||
+        (!hasAnalyzableFragmentSource(fragment) ||
           fragment.visibility !== "group" ||
-          !fragment.aiProcessingConsent))
+          !fragment.aiProcessingConsent ||
+          !["processed", "needs_review"].includes(fragment.status)))
     ) {
       return Response.json({ error: "Processing job not found" }, { status: 404 });
     }
@@ -61,6 +62,7 @@ export async function GET(
     }
     return Response.json({
       status: job.status,
+      fragmentStatus: fragment.status,
       attemptCount: job.attemptCount,
       updatedAt: job.updatedAt,
     }, { headers: { "Cache-Control": "no-store" } });
@@ -115,7 +117,10 @@ export async function POST(
         { status: 410 },
       );
     }
-    if (job.jobType === "ingest" && (!hasApprovedTextSource(fragment) || !fragment.aiProcessingConsent)) {
+    if (job.jobType === "ingest" && (
+      !hasAnalyzableFragmentSource(fragment) ||
+      !fragment.aiProcessingConsent
+    )) {
       return Response.json({ error: "Fragment is not eligible for AI processing" }, { status: 410 });
     }
     if (

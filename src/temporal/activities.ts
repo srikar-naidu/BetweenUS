@@ -1,8 +1,12 @@
 import { ApplicationFailure } from "@temporalio/activity";
 import { createHash } from "node:crypto";
 import { ObjectId } from "mongodb";
-import { FRAGMENT_ANALYSIS_VERSION, generateFragmentAnalysis } from "@/lib/ai/fragment-analysis";
-import { OllamaGemmaProvider } from "@/lib/ai/gemma-provider";
+import {
+  FRAGMENT_ANALYSIS_VERSION,
+  generateOrReuseFragmentAnalysis,
+  fragmentSourceDigest,
+} from "@/lib/ai/fragment-analysis";
+import { createGemmaService } from "@/lib/ai/gemma-provider";
 import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
@@ -10,7 +14,7 @@ import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-frag
 import { indexEligibleFragmentAnalysis } from "@/lib/retrieval/index-fragment-analysis";
 import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
 import { reconstructMoment } from "@/lib/pipeline/moment-reconstruction";
-import { hasApprovedTextSource } from "@/lib/domain/memory";
+import { hasAnalyzableFragmentSource, hasApprovedTextSource } from "@/lib/domain/memory";
 import {
   ElevenLabsApiError,
   ElevenLabsClient,
@@ -21,6 +25,8 @@ import { MAX_VOICE_FILE_BYTES, validateVoiceClip } from "@/lib/ingestion/voice-v
 import { MongoVoiceRepository } from "@/lib/repositories/mongodb-voice-repository";
 import { MongoVoiceStorage } from "@/lib/repositories/mongodb-voice-storage";
 import { isManagedGroupMediaStorageUri, MongoGroupMediaStorage } from "@/lib/repositories/mongodb-group-media-storage";
+import { sampleVideoFrames } from "@/lib/ai/video-frames";
+import { validateGroupMedia } from "@/lib/ingestion/media-validation";
 
 export async function markProcessingJobStarted(input: {
   jobId: string;
@@ -47,45 +53,82 @@ export async function verifyIngestedFragment(input: { groupId: string; fragmentI
   if (!fragment || fragment.deletionState !== "active") {
     throw ApplicationFailure.nonRetryable("Fragment is unavailable for ingestion", "FragmentUnavailable");
   }
-  if (!hasApprovedTextSource(fragment)) {
-    throw ApplicationFailure.nonRetryable("Fragment has no approved text source", "UnsupportedFragmentType");
+  if (!hasAnalyzableFragmentSource(fragment) || !fragment.aiProcessingConsent) {
+    throw ApplicationFailure.nonRetryable("Fragment has no consented analysis source", "UnsupportedFragmentType");
   }
 }
 
-export async function analyzeTextFragment(input: {
+export async function analyzeFragment(input: {
   groupId: string;
   fragmentId: string;
-}): Promise<string | null> {
+}): Promise<{ analysisId: string; requiresReview: boolean } | null> {
   const database = await getMongoDatabase();
   const memory = new MongoMemoryRepository(database);
   const fragment = await memory.findFragmentById(input.groupId, input.fragmentId);
   if (!fragment || fragment.deletionState !== "active") {
     throw ApplicationFailure.nonRetryable("Fragment is unavailable for analysis", "FragmentUnavailable");
   }
-  if (!hasApprovedTextSource(fragment)) {
-    throw ApplicationFailure.nonRetryable("Fragment has no approved text source", "UnsupportedFragmentType");
+  if (!hasAnalyzableFragmentSource(fragment)) {
+    throw ApplicationFailure.nonRetryable("Fragment has no supported analysis source", "UnsupportedFragmentType");
   }
-  if (!fragment.aiProcessingConsent || !fragment.textContent) return null;
+  if (!fragment.aiProcessingConsent) {
+    throw ApplicationFailure.nonRetryable("Fragment AI consent was revoked", "FragmentConsentRevoked");
+  }
 
   const analysisRepository = new MongoFragmentAnalysisRepository(database);
-  const provider = new OllamaGemmaProvider();
-  const sourceTextSha256 = createHash("sha256").update(fragment.textContent).digest("hex");
+  const provider = createGemmaService();
   const existingAnalysis = await analysisRepository.find(
     input.groupId,
     input.fragmentId,
     FRAGMENT_ANALYSIS_VERSION,
   );
-  const analysis = existingAnalysis &&
-      existingAnalysis.modelVersion === provider.modelVersion &&
-      existingAnalysis.sourceTextSha256 === sourceTextSha256
-    ? existingAnalysis
-    : await generateFragmentAnalysis(fragment, provider);
+  const analysis = await generateOrReuseFragmentAnalysis({
+    fragment,
+    existingAnalysis,
+    provider,
+    loadMedia: async () => {
+      if (
+        (fragment.type !== "image" && fragment.type !== "video") ||
+        !fragment.storageUri ||
+        !isManagedGroupMediaStorageUri(fragment.storageUri) ||
+        typeof fragment.metadata.mimeType !== "string"
+      ) {
+        throw ApplicationFailure.nonRetryable("Private media source is unavailable", "MediaSourceUnavailable");
+      }
+      const stored = await new MongoGroupMediaStorage(database).load({
+        storageUri: fragment.storageUri,
+        groupId: fragment.groupId,
+        fragmentId: fragment.id,
+        authorUserId: fragment.authorUserId,
+        maximumBytes: fragment.type === "image" ? 12_000_000 : 25_000_000,
+      });
+      if (!stored) {
+        throw ApplicationFailure.nonRetryable("Private media source is unavailable", "MediaSourceUnavailable");
+      }
+      const validated = validateGroupMedia(stored.bytes, stored.mimeType);
+      const checksum = createHash("sha256").update(stored.bytes).digest("hex");
+      if (checksum !== fragment.checksumSha256 || validated.type !== fragment.type) {
+        throw ApplicationFailure.nonRetryable("Stored media no longer matches its fragment", "MediaSourceChanged");
+      }
+      if (fragment.type === "image") {
+        return {
+          images: [stored.bytes],
+          evidenceLocators: ["whole_image"],
+        };
+      }
+      const frames = await sampleVideoFrames(stored.bytes);
+      return {
+        images: frames.map((frame) => frame.bytes),
+        evidenceLocators: frames.map((frame) => frame.locator),
+      };
+    },
+  });
   const latest = await memory.findFragmentById(input.groupId, input.fragmentId);
   if (
     !latest ||
     latest.deletionState !== "active" ||
     !latest.aiProcessingConsent ||
-    latest.textContent !== fragment.textContent ||
+    fragmentSourceDigest(latest) !== analysis.sourceContentSha256 ||
     latest.visibility !== fragment.visibility
   ) {
     throw ApplicationFailure.nonRetryable("Fragment eligibility changed during analysis", "FragmentEligibilityChanged");
@@ -101,9 +144,12 @@ export async function analyzeTextFragment(input: {
   const current = await memory.findFragmentById(input.groupId, input.fragmentId);
   if (!current || current.deletionState !== "active" || !current.aiProcessingConsent) {
     await analysisRepository.delete(input.groupId, input.fragmentId);
+    if (process.env.TIGER_DATABASE_URL) {
+      await new TigerDataFragmentSearch().removeGroupVisibleFragment(input.groupId, input.fragmentId);
+    }
     return null;
   }
-  return analysis.id;
+  return { analysisId: analysis.id, requiresReview: analysis.requiresReview };
 }
 
 export async function transcribeVoiceNote(input: {
@@ -230,7 +276,7 @@ export async function markProcessingJobSucceeded(input: {
   outputRef: string;
   groupId?: string;
   fragmentId?: string;
-  fragmentStatus?: "processed";
+  fragmentStatus?: "processed" | "needs_review";
 }): Promise<void> {
   const database = await getMongoDatabase();
   const repository = new MongoIngestionRepository(database);

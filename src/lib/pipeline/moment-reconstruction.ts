@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { hasApprovedTextSource, type Moment, type MomentEvidence } from "@/lib/domain/memory";
-import { OllamaGemmaProvider, type StructuredGenerationInput } from "@/lib/ai/gemma-provider";
+import { hasAnalyzableFragmentSource, type Moment, type MomentEvidence } from "@/lib/domain/memory";
+import { createGemmaService, type StructuredGenerationInput } from "@/lib/ai/gemma-provider";
 import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import {
@@ -180,21 +180,47 @@ function relationshipIsSupported(
     const factType = item.relationship === "shared_people" ? "person" : "place";
     const values = new Set(
       fragment.facts
-        .filter((fact) => fact.type === factType)
+        .filter((fact) =>
+          fact.type === factType &&
+          (factType !== "person" ||
+            fact.evidence.modality === "text" ||
+            fact.evidence.modality === "voice_transcript"),
+        )
         .map((fact) => normalized(fact.value)),
     );
     return values.size > 0 && peers.some((peer) =>
-      peer.facts.some((fact) => fact.type === factType && values.has(normalized(fact.value))),
+      peer.facts.some((fact) =>
+        fact.type === factType &&
+        (factType !== "person" ||
+          fact.evidence.modality === "text" ||
+          fact.evidence.modality === "voice_transcript") &&
+        values.has(normalized(fact.value)),
+      ),
     );
   }
 
   if (item.relationship === "entity_overlap") {
     const values = new Set([
       ...fragment.entities,
-      ...fragment.facts.map((fact) => fact.value),
+      ...fragment.facts
+        .filter((fact) =>
+          fact.type !== "person" ||
+          fact.evidence.modality === "text" ||
+          fact.evidence.modality === "voice_transcript",
+        )
+        .map((fact) => fact.value),
     ].map(normalized));
     return values.size > 0 && peers.some((peer) =>
-      [...peer.entities, ...peer.facts.map((fact) => fact.value)]
+      [
+        ...peer.entities,
+        ...peer.facts
+          .filter((fact) =>
+            fact.type !== "person" ||
+            fact.evidence.modality === "text" ||
+            fact.evidence.modality === "voice_transcript",
+          )
+          .map((fact) => fact.value),
+      ]
         .some((value) => values.has(normalized(value))),
     );
   }
@@ -279,7 +305,7 @@ export function validateMomentReconstructionOutput(
       if (!fragment) {
         throw new TypeError("Gemma cited contradiction evidence outside the context packet");
       }
-      if (!fragment.facts.some((fact) => fact.evidence === quote)) {
+      if (!fragment.facts.some((fact) => fact.evidence.evidence === quote)) {
         throw new TypeError("Gemma cited contradiction text that is not in the stored observations");
       }
       return { fragmentId, quote };
@@ -351,10 +377,9 @@ export async function reconstructMoment(input: {
   );
   if (
     !anchor ||
-    !hasApprovedTextSource(anchor) ||
+    !hasAnalyzableFragmentSource(anchor) ||
     anchor.visibility !== "group" ||
-    !anchor.aiProcessingConsent ||
-    !anchor.textContent
+    !anchor.aiProcessingConsent
   ) {
     throw new MomentReconstructionError(404, "Eligible anchor fragment not found");
   }
@@ -368,7 +393,7 @@ export async function reconstructMoment(input: {
     endAt,
     viewerUserId: input.viewerUserId,
   });
-  const generator = input.generator ?? new OllamaGemmaProvider();
+  const generator = input.generator ?? createGemmaService();
   const distinctAuthors = new Set(packet.candidate_fragments.map((fragment) => fragment.author_key));
   let proposal: ValidatedMomentProposal | null = null;
   if (packet.candidate_fragments.length >= 2 && distinctAuthors.size >= 2) {
@@ -381,9 +406,9 @@ export async function reconstructMoment(input: {
           "Cite only fragment IDs in candidate_fragments.",
           "Each evidence relationship must be directly supported by the supplied facts, entities, timestamps, or summaries.",
           "Voice fragments contain author-reviewed transcripts linked to source audio. Treat their exact quotes as transcript text, not as speaker-identity proof; speaker labels are not identity.",
-          "Use shared_people only for an exactly repeated literal person mention; do not infer that names refer to the same real person.",
+          "Use shared_people only for an exactly repeated literal person mention in text or reviewed transcripts; never identify or connect visual people by appearance.",
           "Treat group_memories only as background context; they are not evidence for this event and must not be cited as fragment evidence.",
-          "Every contradiction must cite exact evidence quotes present in the observations for each referenced fragment.",
+          "Every contradiction must cite exact evidence descriptions present in the observations for each referenced fragment.",
           "List missing evidence and uncertainty notes rather than resolving ambiguous claims.",
           "Never set a certainty label. A deterministic validator and a group member control uncertainty and confirmation.",
         ],

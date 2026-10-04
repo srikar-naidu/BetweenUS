@@ -12,7 +12,7 @@ import { deleteFragmentBackboardMemories } from "@/lib/pipeline/group-backboard-
 import { MongoVoiceStorage } from "@/lib/repositories/mongodb-voice-storage";
 import { MongoVoiceRepository } from "@/lib/repositories/mongodb-voice-repository";
 import { isManagedGroupMediaStorageUri, MongoGroupMediaStorage } from "@/lib/repositories/mongodb-group-media-storage";
-import { hasApprovedTextSource } from "@/lib/domain/memory";
+import { hasAnalyzableFragmentSource, hasApprovedTextSource } from "@/lib/domain/memory";
 
 export const runtime = "nodejs";
 
@@ -53,10 +53,11 @@ export async function PATCH(
       return Response.json({ error: "Review the transcript before changing voice-note privacy settings" }, { status: 409 });
     }
     if (
+      input.aiProcessingConsent &&
       (previous.type === "image" || previous.type === "video") &&
-      input.aiProcessingConsent
+      !hasAnalyzableFragmentSource(previous)
     ) {
-      return Response.json({ error: "AI processing is not available for photo or video posts" }, { status: 400 });
+      return Response.json({ error: "This media source is unavailable for private AI processing" }, { status: 409 });
     }
     const visibility = input.visibility as "private" | "group" | "restricted";
     const aiProcessingConsent = input.aiProcessingConsent;
