@@ -21,5 +21,7 @@ until env OLLAMA_HOST=127.0.0.1:11434 ollama list >/dev/null 2>&1; do
   sleep 2
 done
 
-env OLLAMA_HOST=127.0.0.1:11434 ollama pull "$GEMMA_MODEL"
+if ! env OLLAMA_HOST=127.0.0.1:11434 ollama show "$GEMMA_MODEL" >/dev/null 2>&1; then
+  env OLLAMA_HOST=127.0.0.1:11434 ollama pull "$GEMMA_MODEL"
+fi
 wait "$server_pid"

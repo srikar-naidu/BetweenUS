@@ -109,6 +109,7 @@ export interface EventStoryDocument {
     uncertainty: "grounded" | "uncertain";
   }>;
   generatedByGemma?: boolean;
+  generationMethod?: "gemma" | "deterministic" | "manual";
   generatedByJobId?: string | null;
   revision: number;
   updatedBy: string;

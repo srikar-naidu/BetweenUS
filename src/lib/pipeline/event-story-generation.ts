@@ -1,6 +1,6 @@
 import { fragmentSourceDigest, type FragmentAnalysis } from "@/lib/ai/fragment-analysis";
+import { GemmaProviderError, type GemmaService } from "@/lib/ai/gemma-provider";
 import { hasApprovedTextSource, type Fragment, type Moment } from "@/lib/domain/memory";
-import type { StructuredGenerationInput } from "@/lib/ai/gemma-provider";
 
 export const MAX_EVENT_STORY_MOMENTS = 12;
 export const MAX_EVENT_STORY_FRAGMENTS = 16;
@@ -38,7 +38,10 @@ export interface ValidatedEventStory {
   narrative: string;
   momentIds: string[];
   evidenceReferences: EventStoryEvidenceReference[];
+  generationMethod: "gemma" | "deterministic";
 }
+
+type EventStoryGenerator = Pick<GemmaService, "generateStructured">;
 
 export class EventStoryGenerationError extends Error {
   constructor(message: string) {
@@ -216,6 +219,41 @@ export function validateEventStoryResponse(
     narrative: evidenceReferences.map((reference) => reference.claim).join("\n\n"),
     momentIds: packet.moments.map((moment) => moment.moment_id),
     evidenceReferences,
+    generationMethod: "gemma",
+  };
+}
+
+export function createDeterministicEventStory(
+  packet: EventStoryContextPacket,
+): ValidatedEventStory {
+  const firstMoment = packet.moments[0];
+  if (!firstMoment) {
+    throw new EventStoryGenerationError("A deterministic recap needs at least one confirmed Moment.");
+  }
+  const firstTitle = firstMoment.title?.trim();
+  const title = firstTitle
+    ? packet.moments.length === 1
+      ? firstTitle
+      : `${firstTitle} and ${packet.moments.length - 1} more Moment${packet.moments.length === 2 ? "" : "s"}`
+    : "Event recap";
+  const evidenceReferences = packet.moments.map((moment, index) => {
+    const momentTitle = moment.title?.trim();
+    const summary = moment.summary.trim();
+    const detail = momentTitle && summary && momentTitle !== summary
+      ? `${momentTitle}. ${summary}`
+      : momentTitle || summary || "Details were not recorded for this Moment.";
+    return {
+      claim: `Moment ${index + 1}: ${detail}`,
+      fragmentIds: [...new Set(moment.sources.map((source) => source.fragment_id))],
+      uncertainty: "grounded" as const,
+    };
+  });
+  return {
+    title: title.slice(0, 120),
+    narrative: evidenceReferences.map((reference) => reference.claim).join("\n\n"),
+    momentIds: packet.moments.map((moment) => moment.moment_id),
+    evidenceReferences,
+    generationMethod: "deterministic",
   };
 }
 
@@ -224,25 +262,30 @@ export async function generateEventStory(input: {
   moments: readonly Moment[];
   fragments: readonly Fragment[];
   analyses: readonly FragmentAnalysis[];
-  generator: {
-    generateStructured(input: StructuredGenerationInput): Promise<Record<string, unknown>>;
-  };
+  generator: EventStoryGenerator | (() => EventStoryGenerator);
 }): Promise<ValidatedEventStory> {
   const packet = buildEventStoryContextPacket(input);
-  const result = await input.generator.generateStructured({
-    task: "reconstruct_event_story",
-    contextPacket: {
-      event: packet,
-      constraints: [
-        "Write an editable, concise, chronological recap of this one event.",
-        "Use only the supplied confirmed Moments and Gemma observations. Do not invent identities, exact locations, dialogue, emotions, or causes.",
-        "Every section must cite one or more supplied evidence fragment IDs.",
-        "Mark a section uncertain when the evidence is incomplete or tentative.",
-        "Visual observations describe visible details only; voice content is only an author-reviewed transcript.",
-      ],
-    },
-    responseSchema: eventStoryResponseSchema(packet),
-    think: false,
-  });
+  let result: Record<string, unknown>;
+  try {
+    const generator = typeof input.generator === "function" ? input.generator() : input.generator;
+    result = await generator.generateStructured({
+      task: "reconstruct_event_story",
+      contextPacket: {
+        event: packet,
+        constraints: [
+          "Write an editable, concise, chronological recap of this one event.",
+          "Use only the supplied confirmed Moments and Gemma observations. Do not invent identities, exact locations, dialogue, emotions, or causes.",
+          "Every section must cite one or more supplied evidence fragment IDs.",
+          "Mark a section uncertain when the evidence is incomplete or tentative.",
+          "Visual observations describe visible details only; voice content is only an author-reviewed transcript.",
+        ],
+      },
+      responseSchema: eventStoryResponseSchema(packet),
+      think: false,
+    });
+  } catch (error) {
+    if (error instanceof GemmaProviderError) return createDeterministicEventStory(packet);
+    throw error;
+  }
   return validateEventStoryResponse(result, packet);
 }

@@ -15,6 +15,7 @@ function asEventStory(record: StoredEventStory): EventStoryDocument {
     id: _id,
     evidenceReferences: story.evidenceReferences ?? [],
     generatedByGemma: story.generatedByGemma ?? false,
+    generationMethod: story.generationMethod ?? (story.generatedByGemma ? "gemma" : "manual"),
     generatedByJobId: story.generatedByJobId ?? null,
   };
 }
@@ -55,6 +56,7 @@ export class MongoEventStoryRepository {
     expectedRevision: number;
     evidenceReferences?: EventStoryDocument["evidenceReferences"];
     generatedByGemma?: boolean;
+    generationMethod?: EventStoryDocument["generationMethod"];
     generatedByJobId?: string | null;
   }): Promise<EventStoryDocument | null> {
     await this.ensureIndexes();
@@ -75,6 +77,7 @@ export class MongoEventStoryRepository {
             updatedBy: input.updatedBy,
             evidenceReferences: input.evidenceReferences ?? [],
             generatedByGemma: input.generatedByGemma ?? false,
+            generationMethod: input.generationMethod ?? (input.generatedByGemma ? "gemma" : "manual"),
             generatedByJobId: input.generatedByJobId ?? null,
             updatedAt: now,
           },
@@ -92,6 +95,7 @@ export class MongoEventStoryRepository {
         momentIds: input.momentIds,
         evidenceReferences: input.evidenceReferences ?? [],
         generatedByGemma: input.generatedByGemma ?? false,
+        generationMethod: input.generationMethod ?? (input.generatedByGemma ? "gemma" : "manual"),
         generatedByJobId: input.generatedByJobId ?? null,
         updatedBy: input.updatedBy,
         revision: 1,

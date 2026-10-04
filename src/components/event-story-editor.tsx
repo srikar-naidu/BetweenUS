@@ -16,7 +16,7 @@ export interface EventStoryDraft {
     fragmentIds: string[];
     uncertainty: "grounded" | "uncertain";
   }>;
-  generatedByGemma: boolean;
+  generationMethod: "gemma" | "deterministic" | "manual";
   revision: number;
   updatedAt: Date;
 }
@@ -57,7 +57,7 @@ export function EventStoryEditor({
   );
   const [revision, setRevision] = useState(initialStory?.revision ?? 0);
   const [evidenceReferences, setEvidenceReferences] = useState(initialStory?.evidenceReferences ?? []);
-  const [generatedByGemma, setGeneratedByGemma] = useState(initialStory?.generatedByGemma ?? false);
+  const [generationMethod, setGenerationMethod] = useState(initialStory?.generationMethod ?? "manual");
   const [activeJobId, setActiveJobId] = useState(
     initialJob && (initialJob.status === "queued" || initialJob.status === "running")
       ? initialJob.id
@@ -93,16 +93,18 @@ export function EventStoryEditor({
           setNarrative(result.story.narrative);
           setRevision(result.story.revision);
           setEvidenceReferences(result.story.evidenceReferences ?? []);
-          setGeneratedByGemma(result.story.generatedByGemma);
+          setGenerationMethod(result.story.generationMethod);
           setSelectedMomentIds(result.story.momentIds);
-          setMessage("Gemma created an evidence-linked draft. Review and edit it before sharing.");
+          setMessage(result.story.generationMethod === "gemma"
+            ? "Gemma created an evidence-linked draft. Review and edit it before sharing."
+            : "Gemma was unavailable, so a basic evidence-linked recap was created. Review and edit it before sharing.");
           setActiveJobId(null);
           return;
         }
         if (result.job.status === "failed") {
           setError(result.job.errorCategory === "temporal_unavailable"
             ? "The processing worker could not be reached. Check Temporal and retry."
-            : "Gemma could not create the story. Check the worker, then retry.");
+            : "Story generation failed. Check the worker, then retry.");
           setActiveJobId(null);
           return;
         }
@@ -128,7 +130,7 @@ export function EventStoryEditor({
       return;
     }
     if (selectedMomentIds.length >= maxMoments) {
-      setError(`Select no more than ${maxMoments} Moments for one Gemma story.`);
+      setError(`Select no more than ${maxMoments} Moments for one story.`);
       return;
     }
     setSelectedMomentIds([...selectedMomentIds, momentId]);
@@ -146,13 +148,13 @@ export function EventStoryEditor({
         body: JSON.stringify({ momentIds: selectedMomentIds, expectedRevision: revision }),
       });
       const result = await response.json() as { jobId?: string; error?: string };
-      if (!response.ok || !result.jobId) throw new Error(result.error ?? "Could not queue Gemma story generation.");
+      if (!response.ok || !result.jobId) throw new Error(result.error ?? "Could not queue story generation.");
       setActiveJobId(result.jobId);
       setJobStatus("queued");
       setMessage("Story queued. Gemma is reviewing the selected moments and their evidence.");
     } catch (caught) {
       setJobStatus("failed");
-      setError(caught instanceof Error ? caught.message : "Could not queue Gemma story generation.");
+      setError(caught instanceof Error ? caught.message : "Could not queue story generation.");
     }
   }
 
@@ -178,7 +180,7 @@ export function EventStoryEditor({
       if (!response.ok || !result.story) throw new Error(result.error ?? "Could not save the event story.");
       setRevision(result.story.revision);
       setEvidenceReferences([]);
-      setGeneratedByGemma(false);
+      setGenerationMethod("manual");
       setMessage("Event story saved for your album.");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save the event story.");
@@ -198,7 +200,7 @@ export function EventStoryEditor({
       <section className="event-story-header">
         <p className="eyebrow">A STORY MADE TOGETHER</p>
         <h1>{groupName}</h1>
-        <p className="lede">Gemma builds a draft from selected confirmed Moments and their consented observations. Your group can review and edit it.</p>
+        <p className="lede">Gemma builds a draft from selected confirmed Moments and their consented observations. If Gemma is unavailable, Between Us creates a simple chronological recap instead. Your group can review and edit either draft.</p>
       </section>
 
       <section className="event-story-editor">
@@ -208,10 +210,10 @@ export function EventStoryEditor({
         </label>
         <div className="event-story-actions">
           <button className="secondary-button" type="button" disabled={!includedMoments.length || Boolean(activeJobId)} onClick={() => void generateStory()}>
-            {activeJobId ? "Gemma is writing…" : "Generate with Gemma"}
+            {activeJobId ? "Building story…" : "Generate with Gemma"}
           </button>
           <span>
-            Select up to {maxMoments}. Photos and video frames use Gemma observations; voice contributes only its author-reviewed transcript.
+            Select up to {maxMoments}. Photos and video frames use Gemma observations; voice contributes only its author-reviewed transcript. The fallback uses only confirmed Moment titles, summaries, and cited sources.
           </span>
         </div>
         <label>
@@ -223,9 +225,15 @@ export function EventStoryEditor({
             onChange={(event) => setNarrative(event.target.value)}
           />
         </label>
-        {generatedByGemma && evidenceReferences.length > 0 && (
-          <section className="event-story-provenance" aria-label="Gemma evidence references">
-            <strong>Evidence behind this draft</strong>
+        {evidenceReferences.length > 0 && (
+          <section className="event-story-provenance" aria-label="Story evidence references">
+            <strong>
+              {generationMethod === "gemma"
+                ? "Gemma draft · evidence behind this story"
+                : generationMethod === "deterministic"
+                  ? "Basic recap · confirmed Moment evidence"
+                  : "Evidence behind this draft"}
+            </strong>
             <ul>
               {evidenceReferences.map((reference, index) => (
                 <li key={`${index}-${reference.fragmentIds.join("-")}`}>
@@ -244,7 +252,7 @@ export function EventStoryEditor({
             {saving ? "Saving…" : "Save event story"}
           </button>
           {message && !activeJobId && <p className="privacy-status" role="status">{message}</p>}
-          {activeJobId && <p className="privacy-status" role="status">{jobStatus === "running" ? "Gemma is creating the story…" : message}</p>}
+          {activeJobId && <p className="privacy-status" role="status">{jobStatus === "running" ? "Building the story…" : message}</p>}
           {error && <p className="error-message" role="alert">{error}</p>}
         </div>
       </section>

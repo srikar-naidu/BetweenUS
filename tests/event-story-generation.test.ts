@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildEventStoryContextPacket,
+  createDeterministicEventStory,
   generateEventStory,
   validateEventStoryResponse,
 } from "../src/lib/pipeline/event-story-generation";
+import { GemmaProviderError } from "../src/lib/ai/gemma-provider";
 import { fragmentSourceDigest, type FragmentAnalysis } from "../src/lib/ai/fragment-analysis";
 import type { Fragment, Moment } from "../src/lib/domain/memory";
 
@@ -128,6 +130,7 @@ test("Gemma event-story generation uses all selected consented observations and 
   });
 
   assert.equal(generated.title, "Before sunset");
+  assert.equal(generated.generationMethod, "gemma");
   assert.equal(generated.momentIds[0], "moment-a");
   assert.equal(generated.evidenceReferences[0]?.fragmentIds.length, 3);
   const packet = receivedPacket as {
@@ -136,6 +139,63 @@ test("Gemma event-story generation uses all selected consented observations and 
   assert.deepEqual(
     packet.event.moments[0]?.sources.map((source) => source.media_type),
     ["image", "video", "voice"],
+  );
+});
+
+test("event-story generation falls back to a chronological evidence-linked recap when Gemma is unavailable", async () => {
+  const firstMoment = moment(["fragment-image"]);
+  const secondMoment = {
+    ...moment(["fragment-video"]),
+    id: "moment-b",
+    title: "Walking home",
+    summary: "The group walked home together.",
+    startAt: new Date(capturedAt.getTime() + 10 * 60_000),
+  };
+  const fragments = [fragment("fragment-image", "image"), fragment("fragment-video", "video")];
+  const generated = await generateEventStory({
+    groupId: "group-a",
+    moments: [secondMoment, firstMoment],
+    fragments,
+    analyses: fragments.map(analysis),
+    generator: () => ({
+      async generateStructured() {
+        throw new GemmaProviderError("Could not reach the configured Gemma runtime");
+      },
+    }),
+  });
+
+  assert.equal(generated.generationMethod, "deterministic");
+  assert.equal(generated.momentIds[0], "moment-a");
+  assert.match(generated.narrative, /^Moment 1: Meeting before sunset\./);
+  assert.ok(generated.narrative.indexOf("Moment 1:") < generated.narrative.indexOf("Moment 2:"));
+  assert.deepEqual(generated.evidenceReferences.map((reference) => reference.fragmentIds), [
+    ["fragment-image"],
+    ["fragment-video"],
+  ]);
+});
+
+test("deterministic story fallback rejects an empty Moment packet", () => {
+  assert.throws(
+    () => createDeterministicEventStory({ version: "event-story-context-v1", moments: [] }),
+    /at least one confirmed Moment/,
+  );
+});
+
+test("invalid Gemma story output is rejected instead of silently using the fallback", async () => {
+  const source = fragment("fragment-image", "image");
+  await assert.rejects(
+    generateEventStory({
+      groupId: "group-a",
+      moments: [moment([source.id])],
+      fragments: [source],
+      analyses: [analysis(source)],
+      generator: {
+        async generateStructured() {
+          return { title: "Invalid", sections: [] };
+        },
+      },
+    }),
+    /Gemma returned an invalid event-story structure/,
   );
 });
 

@@ -28,6 +28,7 @@ export async function GET(
         momentIds: story.momentIds,
         evidenceReferences: story.evidenceReferences ?? [],
         generatedByGemma: story.generatedByGemma ?? false,
+        generationMethod: story.generationMethod ?? (story.generatedByGemma ? "gemma" : "manual"),
         revision: story.revision,
         updatedAt: story.updatedAt,
       } : null,
@@ -88,6 +89,7 @@ export async function PUT(
       momentIds: input.momentIds as string[],
       evidenceReferences: [],
       generatedByGemma: false,
+      generationMethod: "manual",
       updatedBy: session.user.id,
       expectedRevision: input.expectedRevision as number,
     });
@@ -101,6 +103,7 @@ export async function PUT(
         momentIds: story.momentIds,
         evidenceReferences: story.evidenceReferences ?? [],
         generatedByGemma: story.generatedByGemma ?? false,
+        generationMethod: story.generationMethod ?? (story.generatedByGemma ? "gemma" : "manual"),
         revision: story.revision,
         updatedAt: story.updatedAt,
       },

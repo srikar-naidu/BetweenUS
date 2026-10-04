@@ -51,7 +51,7 @@ export default async function EventStoryPage({
     narrative: document.narrative,
     momentIds: document.momentIds.filter((id) => momentIds.has(id)),
     evidenceReferences: document.evidenceReferences ?? [],
-    generatedByGemma: document.generatedByGemma ?? false,
+    generationMethod: document.generationMethod ?? (document.generatedByGemma ? "gemma" : "manual"),
     revision: document.revision,
     updatedAt: document.updatedAt,
   } : null;

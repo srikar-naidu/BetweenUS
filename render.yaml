@@ -70,6 +70,12 @@ services:
         sync: false
       - key: TIGER_DATABASE_URL
         sync: false
+      - key: BACKBOARD_API_KEY
+        sync: false
+      - key: BACKBOARD_API_BASE_URL
+        value: https://app.backboard.io/api
+      - key: BACKBOARD_TIMEOUT_MS
+        value: "30000"
       - key: ELEVENLABS_API_KEY
         sync: false
       - key: ELEVENLABS_TIMEOUT_MS

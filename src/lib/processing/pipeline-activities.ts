@@ -413,7 +413,7 @@ export async function generateEventStoryForGroup(input: { jobId: string }): Prom
       moments: eligibleMoments,
       fragments,
       analyses,
-      generator: createGemmaService(),
+      generator: createGemmaService,
     });
   } catch (error) {
     if (error instanceof EventStoryGenerationError) {
@@ -421,13 +421,17 @@ export async function generateEventStoryForGroup(input: { jobId: string }): Prom
     }
     throw error;
   }
+  if (generated.generationMethod === "deterministic") {
+    console.warn("[event-story] Gemma unavailable; generated a deterministic recap");
+  }
   const saved = await new MongoEventStoryRepository(database).save({
     groupId: job.groupId,
     title: generated.title,
     narrative: generated.narrative,
     momentIds: generated.momentIds,
     evidenceReferences: generated.evidenceReferences,
-    generatedByGemma: true,
+    generatedByGemma: generated.generationMethod === "gemma",
+    generationMethod: generated.generationMethod,
     generatedByJobId: job.id,
     updatedBy: job.requesterUserId,
     expectedRevision: job.expectedRevision,
