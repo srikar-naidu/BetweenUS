@@ -104,6 +104,20 @@ export class MongoMemoryRepository {
     return document ? asFragment(document) : null;
   }
 
+  async findFragmentVisibleToMember(
+    groupId: string,
+    fragmentId: string,
+    userId: string,
+  ): Promise<Fragment | null> {
+    const document = await this.fragments.findOne({
+      _id: fragmentId,
+      groupId,
+      deletionState: "active",
+      $or: [{ visibility: "group" }, { authorUserId: userId }],
+    });
+    return document ? asFragment(document) : null;
+  }
+
   async updateFragmentStatus(
     groupId: string,
     fragmentId: string,
@@ -159,14 +173,29 @@ export class MongoMemoryRepository {
     authorUserId: string;
     visibility: Fragment["visibility"];
     aiProcessingConsent: boolean;
+    processingVersion?: string;
   }): Promise<Fragment | null> {
     const now = new Date();
+    const existing = await this.fragments.findOne({
+      _id: input.fragmentId,
+      groupId: input.groupId,
+      authorUserId: input.authorUserId,
+      deletionState: "active",
+    });
+    if (!existing) return null;
     const consentUpdate: Record<string, unknown> = {
       visibility: input.visibility,
       aiProcessingConsent: input.aiProcessingConsent,
-      aiProcessingConsentRevokedAt: input.aiProcessingConsent ? null : now,
     };
-    if (input.aiProcessingConsent) consentUpdate.aiProcessingConsentAt = now;
+    if (input.processingVersion) consentUpdate.processingVersion = input.processingVersion;
+    if (existing.aiProcessingConsent !== input.aiProcessingConsent) {
+      if (input.aiProcessingConsent) {
+        consentUpdate.aiProcessingConsentAt = now;
+        consentUpdate.aiProcessingConsentRevokedAt = null;
+      } else {
+        consentUpdate.aiProcessingConsentRevokedAt = now;
+      }
+    }
     await this.fragments.updateOne(
       {
         _id: input.fragmentId,
@@ -358,5 +387,14 @@ export class MongoMemoryRepository {
       .limit(limit)
       .toArray();
     return documents.map(asMoment);
+  }
+
+  async findLinkedMomentIds(groupId: string, fragmentId: string): Promise<string[]> {
+    const moments = await this.moments.find({
+      groupId,
+      "evidence.fragmentId": fragmentId,
+      status: { $in: ["candidate", "confirmed"] },
+    }).project({ _id: 1 }).toArray();
+    return moments.map((moment) => String(moment._id));
   }
 }

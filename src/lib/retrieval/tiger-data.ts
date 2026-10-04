@@ -3,12 +3,14 @@ import type {
   TemporalFragmentCandidate,
   TemporalFragmentQuery,
 } from "@/lib/domain/memory";
+import { rankFragmentCandidates } from "@/lib/retrieval/ranking";
 
 interface SearchIndexRow {
   fragment_id: string;
   captured_at: Date;
   semantic_summary: string;
   entity_keys: string[];
+  moment_ids?: string[];
 }
 
 interface SqlExecutor {
@@ -53,20 +55,29 @@ export class TigerDataFragmentSearch {
     capturedAt: Date;
     semanticSummary: string;
     entityKeys?: string[];
+    momentIds?: string[];
+    analysisVersion?: string;
+    modelVersion?: string;
   }): Promise<void> {
     await this.sql.query(
       `INSERT INTO fragment_search
-        (group_id, fragment_id, captured_at, semantic_summary, entity_keys)
-       VALUES ($1, $2, $3, $4, $5)
+        (group_id, fragment_id, captured_at, semantic_summary, entity_keys, moment_ids, analysis_version, model_version)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT (group_id, fragment_id, captured_at)
        DO UPDATE SET semantic_summary = EXCLUDED.semantic_summary,
-                     entity_keys = EXCLUDED.entity_keys`,
+                     entity_keys = EXCLUDED.entity_keys,
+                     moment_ids = EXCLUDED.moment_ids,
+                     analysis_version = EXCLUDED.analysis_version,
+                     model_version = EXCLUDED.model_version`,
       [
         input.groupId,
         input.fragmentId,
         input.capturedAt,
         input.semanticSummary,
         input.entityKeys ?? [],
+        input.momentIds ?? [],
+        input.analysisVersion ?? "demo-v1",
+        input.modelVersion ?? "demo",
       ],
     );
   }
@@ -90,32 +101,33 @@ export class TigerDataFragmentSearch {
     query: TemporalFragmentQuery,
   ): Promise<TemporalFragmentCandidate[]> {
     const result = await this.sql.query(
-      `SELECT fragment_id, captured_at, semantic_summary, entity_keys
+      `SELECT fragment_id, captured_at, semantic_summary, entity_keys, moment_ids
        FROM fragment_search
        WHERE group_id = $1
          AND captured_at >= $2
          AND captured_at <= $3
          AND ($4::text IS NULL OR fragment_id <> $4)
-         AND ($5::text IS NULL OR to_tsvector('simple', semantic_summary)
-              @@ plainto_tsquery('simple', $5))
-       ORDER BY abs(extract(epoch FROM (captured_at - $6::timestamptz))) ASC
-       LIMIT $7`,
+       ORDER BY abs(extract(epoch FROM (captured_at - $5::timestamptz))) ASC
+       LIMIT $6`,
       [
         query.groupId,
         query.startAt,
         query.endAt,
         query.excludeFragmentId ?? null,
-        query.searchText?.trim() || null,
         new Date((query.startAt.getTime() + query.endAt.getTime()) / 2),
-        Math.max(1, Math.min(query.limit ?? 20, 100)),
+        100,
       ],
     );
 
-    return result.rows.map((row) => ({
+    const candidates: TemporalFragmentCandidate[] = result.rows.map((row) => ({
       fragmentId: row.fragment_id,
       capturedAt: row.captured_at,
       semanticSummary: row.semantic_summary,
       entityKeys: row.entity_keys,
+      momentIds: row.moment_ids ?? [],
+      retrievalScore: 0,
+      matchedSignals: [],
     }));
+    return rankFragmentCandidates(query, candidates);
   }
 }

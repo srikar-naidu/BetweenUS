@@ -42,6 +42,10 @@ export class OllamaGemmaProvider {
     private readonly fetcher: typeof fetch = fetch,
   ) {}
 
+  get modelVersion(): string {
+    return this.config.model;
+  }
+
   async generateStructured(
     input: StructuredGenerationInput,
   ): Promise<Record<string, unknown>> {

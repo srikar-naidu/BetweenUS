@@ -96,6 +96,28 @@ test("Mongo fragment reads separate member visibility from AI processing consent
   assert.equal(memberFilter?.deletionState, "active");
 });
 
+test("Mongo member-visible fragment lookup scopes visibility to the group and active records", async () => {
+  let memberFilter: Record<string, unknown> | undefined;
+  const repository = new MongoMemoryRepository({
+    collection: () => ({
+      findOne: async (filter: Record<string, unknown>) => {
+        memberFilter = filter;
+        return null;
+      },
+    }),
+  } as unknown as Db);
+
+  await repository.findFragmentVisibleToMember("group-a", "fragment-a", "user-a");
+
+  assert.equal(memberFilter?._id, "fragment-a");
+  assert.equal(memberFilter?.groupId, "group-a");
+  assert.equal(memberFilter?.deletionState, "active");
+  assert.deepEqual(memberFilter?.$or, [
+    { visibility: "group" },
+    { authorUserId: "user-a" },
+  ]);
+});
+
 test("fragment and moment reads always scope Mongo filters to the requested group", async () => {
   const fragmentFilters: Record<string, unknown>[] = [];
   const momentFilters: Record<string, unknown>[] = [];
@@ -251,10 +273,11 @@ test("Tiger retrieval uses parameterized group/time filters and caps result coun
     new Date("2026-09-04T11:50:00Z"),
     new Date("2026-09-04T12:30:00Z"),
     "fragment-a",
-    "cafeteria",
+    new Date("2026-09-04T12:10:00Z"),
   ]);
-  assert.equal(queryValues[6], 100);
+  assert.equal(queryValues[5], 100);
   assert.equal(candidates[0].fragmentId, "fragment-b");
+  assert.ok(candidates[0].matchedSignals.includes("temporal"));
 });
 
 test("new fragments default private and do not grant AI processing consent", async () => {

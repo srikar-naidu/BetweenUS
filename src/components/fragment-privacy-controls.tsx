@@ -11,6 +11,13 @@ interface Props {
   hasLegacyMedia: boolean;
   canEditPrivacy: boolean;
   canDelete: boolean;
+  onUpdated: (update: {
+    fragmentId: string;
+    visibility: FragmentVisibility;
+    aiProcessingConsent: boolean;
+    processingVersion: string;
+    processingJobStatus: "queued" | "running" | "succeeded" | "failed" | "retrying" | null;
+  }) => void;
   onDeleted: (fragmentId: string) => void;
 }
 
@@ -22,6 +29,7 @@ export function FragmentPrivacyControls({
   hasLegacyMedia,
   canEditPrivacy,
   canDelete,
+  onUpdated,
   onDeleted,
 }: Props) {
   const [visibility, setVisibility] = useState(initialVisibility);
@@ -38,6 +46,22 @@ export function FragmentPrivacyControls({
         body: JSON.stringify({ visibility, aiProcessingConsent: consent }),
       });
       if (response.ok) {
+        const result = await response.json() as {
+          fragment: {
+            id: string;
+            visibility: FragmentVisibility;
+            aiProcessingConsent: boolean;
+            processingVersion: string;
+            processingJobStatus: "queued" | "running" | "succeeded" | "failed" | "retrying" | null;
+          };
+        };
+        onUpdated({
+          fragmentId: result.fragment.id,
+          visibility: result.fragment.visibility,
+          aiProcessingConsent: result.fragment.aiProcessingConsent,
+          processingVersion: result.fragment.processingVersion,
+          processingJobStatus: result.fragment.processingJobStatus,
+        });
         setMessage("Privacy settings saved.");
         return;
       }

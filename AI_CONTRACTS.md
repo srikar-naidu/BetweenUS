@@ -11,13 +11,14 @@ The system should prefer JSON contracts that can be validated before storing or 
 ```json
 {
   "fragment_id": "string",
-  "analysis_version": "string",
+  "summary": "short exact excerpt from the source text",
   "observed_facts": [
     {
       "type": "person|place|object|activity|tone|reference",
       "value": "string",
       "confidence": 0.0,
-      "source": "metadata|vision|text|classification"
+      "source": "text",
+      "evidence": "short exact quote from the source text"
     }
   ],
   "people": ["string"],
@@ -27,12 +28,14 @@ The system should prefer JSON contracts that can be validated before storing or 
   "tone_hint": "string|null",
   "confidence": 0.0,
   "uncertainty": {
-    "status": "confirmed|likely|possible|unknown",
+    "status": "possible|unknown",
     "reason": "string"
   },
   "evidence_fragment_ids": ["string"]
 }
 ```
+
+Phase 3 adds server-owned `analysis_version`, configured `model_version`, `source_text_sha256`, and `analyzed_at` provenance when persisting this contract. The current implementation accepts text fragments only. Fact values must appear inside their exact evidence spans, summaries must be exact source excerpts, and literal people/entity phrases must appear in the source text; the model cannot emit `likely` or `confirmed`.
 
 ## Contract: MomentCandidate
 
@@ -151,3 +154,7 @@ Moment uncertainty is derived by the server, not accepted from Gemma:
 - `confirmed`: never emitted by the model or this pipeline. Reserve it for an explicit human confirmation flow.
 
 The numeric confidence remains a model/system signal, not a factual probability, and cannot upgrade the deterministic uncertainty label. Invalid IDs or unsupported relationship claims reject the candidate rather than being silently rewritten.
+
+## Phase 3 retrieval state
+
+The current no-vector reranker uses deterministic time, lexical, extracted-entity, and available Moment-link signals, with a maximum of 12 candidate fragments per ContextPacket. Extracted entity phrases are unconfirmed clues, not identity or alias proof. A small synthetic test fixture covers a near-time lexical distractor; selecting an embedding model and demonstrating retrieval gains on a labeled real-fragment set remain open evaluation gates.

@@ -27,9 +27,13 @@ export async function processFragmentWorkflow(input: FragmentWorkflowInput): Pro
       fragmentStatus: "processing",
     });
     await runActivity.verifyIngestedFragment({ groupId: input.groupId, fragmentId: input.fragmentId });
+    const analysisId = await runActivity.analyzeTextFragment({
+      groupId: input.groupId,
+      fragmentId: input.fragmentId,
+    });
     await runActivity.markProcessingJobSucceeded({
       jobId: input.jobId,
-      outputRef: input.fragmentId,
+      outputRef: analysisId ?? input.fragmentId,
       groupId: input.groupId,
       fragmentId: input.fragmentId,
       fragmentStatus: "processed",

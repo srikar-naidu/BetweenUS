@@ -55,7 +55,7 @@ export default async function GroupPage({
   const moments = visibleMomentsForMember(groupMoments, memberFragments);
   const fragments: GroupFragmentView[] = memberFragments.map(({ storageUri: _storageUri, ...fragment }) => ({
     ...fragment,
-    processingJobStatus: processingStatuses.get(fragment.id) ?? null,
+    processingJobStatus: fragment.aiProcessingConsent ? processingStatuses.get(fragment.id) ?? null : null,
   }));
 
   return (

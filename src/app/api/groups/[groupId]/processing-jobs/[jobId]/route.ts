@@ -26,6 +26,12 @@ export async function GET(
     ) {
       return Response.json({ error: "Processing job not found" }, { status: 404 });
     }
+    if (job.jobType === "ingest" && !fragment.aiProcessingConsent) {
+      return Response.json(
+        { status: null },
+        { headers: { "Cache-Control": "no-store" } },
+      );
+    }
     return Response.json({
       status: job.status,
       attemptCount: job.attemptCount,
@@ -68,8 +74,8 @@ export async function POST(
     ) {
       return Response.json({ error: "A failed processing job was not found" }, { status: 404 });
     }
-    if (job.jobType === "ingest" && fragment.source === "upload") {
-      return Response.json({ error: "Media fragment processing is no longer supported" }, { status: 410 });
+    if (job.jobType === "ingest" && (fragment.source !== "text" || !fragment.aiProcessingConsent)) {
+      return Response.json({ error: "Fragment is not eligible for AI processing" }, { status: 410 });
     }
     if (job.jobType === "delete_fragment" && fragment.source === "upload" && fragment.storageUri) {
       return Response.json({

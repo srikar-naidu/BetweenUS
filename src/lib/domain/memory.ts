@@ -106,6 +106,8 @@ export interface TemporalFragmentQuery {
   endAt: Date;
   excludeFragmentId?: string;
   searchText?: string;
+  entityKeys?: string[];
+  knownMomentIds?: string[];
   limit?: number;
 }
 
@@ -114,4 +116,7 @@ export interface TemporalFragmentCandidate {
   capturedAt: Date;
   semanticSummary: string;
   entityKeys: string[];
+  momentIds: string[];
+  retrievalScore: number;
+  matchedSignals: Array<"temporal" | "lexical" | "entity_overlap" | "known_moment">;
 }

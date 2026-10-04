@@ -60,11 +60,20 @@ export function FragmentComposer({
         }),
       });
       if (!response.ok) throw new Error(await readError(response));
-      const result = await response.json() as { fragment: GroupFragmentView; processingStatus: string };
+      const result = await response.json() as {
+        fragment: GroupFragmentView;
+        processingStatus: GroupFragmentView["processingJobStatus"];
+      };
       onCreated(result.fragment);
       setTextContent("");
       idempotencyKey.current = null;
-      setMessage(result.processingStatus === "queued" ? "Text fragment saved and queued." : "Text fragment saved; processing could not start.");
+      setMessage(
+        result.processingStatus === "queued"
+          ? "Text fragment saved and queued."
+          : result.processingStatus === null
+            ? "Text fragment saved. AI processing is off."
+            : "Text fragment saved; processing could not start.",
+      );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Text fragment could not be saved.");
     } finally {

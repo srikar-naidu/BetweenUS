@@ -1,8 +1,12 @@
 import { apiErrorResponse } from "@/lib/api/errors";
 import { requireGroupMembership } from "@/lib/auth/group-access";
+import { FRAGMENT_ANALYSIS_VERSION } from "@/lib/ai/fragment-analysis";
 import { getMongoDatabase } from "@/lib/db/mongodb";
+import { getTemporalClient, startFragmentWorkflow, TemporalConfigurationError } from "@/lib/processing/temporal-client";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
+import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-fragment-analysis-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
+import { indexEligibleFragmentAnalysis } from "@/lib/retrieval/index-fragment-analysis";
 import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
 
 export const runtime = "nodejs";
@@ -30,24 +34,79 @@ export async function PATCH(
       return Response.json({ error: "Visibility and AI consent must be explicit" }, { status: 400 });
     }
 
-    const repository = new MongoMemoryRepository(await getMongoDatabase());
+    const database = await getMongoDatabase();
+    const repository = new MongoMemoryRepository(database);
+    const previous = await repository.findFragmentById(groupId, fragmentId);
+    if (!previous || previous.authorUserId !== session.user.id) {
+      return Response.json({ error: "Fragment not found" }, { status: 404 });
+    }
+    const visibility = input.visibility as "private" | "group" | "restricted";
+    const aiProcessingConsent = input.aiProcessingConsent;
+    const analyses = new MongoFragmentAnalysisRepository(database);
+    const existingAnalysis = aiProcessingConsent
+      ? await analyses.find(groupId, fragmentId, FRAGMENT_ANALYSIS_VERSION)
+      : null;
+    const ingestion = new MongoIngestionRepository(database);
+    const previousJob = await ingestion.findProcessingJob(
+      groupId,
+      `ingest:${groupId}:${fragmentId}:${previous.processingVersion}`,
+    );
+    const shouldQueueAnalysis =
+      aiProcessingConsent &&
+      !existingAnalysis &&
+      previousJob?.status !== "queued" &&
+      previousJob?.status !== "running" &&
+      (previous.aiProcessingConsent !== true || !previousJob || previousJob.status === "succeeded");
+    const processingVersion = shouldQueueAnalysis
+      ? `${FRAGMENT_ANALYSIS_VERSION}-${Date.now()}`
+      : undefined;
+    if (shouldQueueAnalysis) await getTemporalClient();
+
     const fragment = await repository.updateFragmentPrivacy({
       groupId,
       fragmentId,
       authorUserId: session.user.id,
-      visibility: input.visibility as "private" | "group" | "restricted",
-      aiProcessingConsent: input.aiProcessingConsent,
+      visibility,
+      aiProcessingConsent,
+      ...(processingVersion ? { processingVersion } : {}),
     });
     if (!fragment) return Response.json({ error: "Fragment not found" }, { status: 404 });
-    if (
-      (fragment.visibility !== "group" || !fragment.aiProcessingConsent) &&
-      process.env.TIGER_DATABASE_URL
-    ) {
+    if (!fragment.aiProcessingConsent) await analyses.delete(groupId, fragmentId);
+    if ((fragment.visibility !== "group" || !fragment.aiProcessingConsent) && process.env.TIGER_DATABASE_URL) {
       await new TigerDataFragmentSearch().removeGroupVisibleFragment(groupId, fragmentId);
+    } else if (fragment.visibility === "group" && fragment.aiProcessingConsent && existingAnalysis) {
+      await indexEligibleFragmentAnalysis(database, existingAnalysis);
+    }
+
+    let processingStatus = fragment.aiProcessingConsent ? previousJob?.status ?? null : null;
+    let jobId = fragment.aiProcessingConsent ? previousJob?.id ?? null : null;
+    let workflowId = fragment.aiProcessingConsent ? previousJob?.temporalWorkflowId ?? null : null;
+    if (shouldQueueAnalysis && processingVersion) {
+      const job = await ingestion.upsertProcessingJob({
+        groupId,
+        fragmentId,
+        jobType: "ingest",
+        processingVersion,
+      });
+      jobId = job.id;
+      try {
+        workflowId = await startFragmentWorkflow(job, "processFragmentWorkflow");
+        processingStatus = "queued";
+      } catch {
+        await ingestion.markProcessingJobFailed({ id: job.id, errorMessage: "temporal_unavailable" });
+        workflowId = null;
+        processingStatus = "failed";
+      }
     }
     const { storageUri: _storageUri, ...visibleFragment } = fragment;
-    return Response.json({ fragment: visibleFragment }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json(
+      { fragment: { ...visibleFragment, processingJobStatus: processingStatus }, jobId, workflowId },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
+    if (error instanceof TemporalConfigurationError) {
+      return Response.json({ error: "Processing is not configured on this server" }, { status: 503 });
+    }
     return apiErrorResponse(error);
   }
 }
@@ -74,6 +133,7 @@ export async function DELETE(
     if (process.env.TIGER_DATABASE_URL) {
       await new TigerDataFragmentSearch().removeGroupVisibleFragment(groupId, fragmentId);
     }
+    await new MongoFragmentAnalysisRepository(database).delete(groupId, fragmentId);
     await new MongoIngestionRepository(database).markFragmentDeletionComplete(groupId, fragmentId);
     return Response.json({ status: "deleted", legacyMediaCleanupRequired }, { status: 202 });
   } catch (error) {

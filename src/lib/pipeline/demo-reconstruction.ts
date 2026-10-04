@@ -11,6 +11,7 @@ import {
 } from "@/lib/ai/gemma-provider";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
+import { MAX_CONTEXT_CANDIDATES, rankFragmentCandidates } from "@/lib/retrieval/ranking";
 
 export interface DemoFragment extends Fragment {
   semanticSummary: string;
@@ -211,13 +212,7 @@ const allowedRelationships = new Set<MomentEvidence["relationship"]>([
 ]);
 
 function rankDemoCandidates(query: TemporalFragmentQuery): DemoCandidate[] {
-  const searchTerms = (query.searchText ?? "")
-    .toLowerCase()
-    .split(/\W+/)
-    .filter(Boolean);
-  const midpoint = (query.startAt.getTime() + query.endAt.getTime()) / 2;
-
-  return sampleFragments
+  const eligible = sampleFragments
     .filter(
       (fragment) =>
         fragment.groupId === query.groupId &&
@@ -225,20 +220,20 @@ function rankDemoCandidates(query: TemporalFragmentQuery): DemoCandidate[] {
         fragment.capturedAt >= query.startAt &&
         fragment.capturedAt <= query.endAt &&
         fragment.id !== query.excludeFragmentId,
-    )
-    .map((fragment) => {
-      const text = `${fragment.semanticSummary} ${fragment.entityKeys.join(" ")}`.toLowerCase();
-      const lexicalMatches = searchTerms.filter((term) => text.includes(term)).length;
-      const temporalDistance = Math.abs(fragment.capturedAt.getTime() - midpoint);
-      return {
-        ...fragment,
-        retrievalScore: lexicalMatches * 10 - temporalDistance / 60_000,
-        lexicalMatches,
-      };
-    })
-    .filter((candidate) => searchTerms.length === 0 || candidate.lexicalMatches > 0)
-    .sort((left, right) => right.retrievalScore - left.retrievalScore)
-    .slice(0, Math.max(1, Math.min(query.limit ?? 20, 100)));
+    );
+  const byId = new Map(eligible.map((fragment) => [fragment.id, fragment]));
+  return rankFragmentCandidates(query, eligible.map((fragment) => ({
+    fragmentId: fragment.id,
+    capturedAt: fragment.capturedAt,
+    semanticSummary: fragment.semanticSummary,
+    entityKeys: fragment.entityKeys,
+    momentIds: [],
+    retrievalScore: 0,
+    matchedSignals: [],
+  }))).flatMap((candidate) => {
+    const fragment = byId.get(candidate.fragmentId);
+    return fragment ? [{ ...fragment, retrievalScore: candidate.retrievalScore }] : [];
+  });
 }
 
 function getMemoryAdapters(): DemoPipelineAdapters {
@@ -441,12 +436,14 @@ export async function runDemoReconstruction(options: {
     endAt: windowEnd,
     excludeFragmentId: anchor.id,
     searchText: "cafeteria",
-    limit: 20,
+    entityKeys: anchor.entityKeys,
+    limit: MAX_CONTEXT_CANDIDATES - 1,
   });
   const allCandidates: DemoCandidate[] = [
     { ...anchor, retrievalScore: 1 },
     ...candidates,
-  ].sort((left, right) => left.capturedAt.getTime() - right.capturedAt.getTime());
+  ].sort((left, right) => left.capturedAt.getTime() - right.capturedAt.getTime())
+    .slice(0, MAX_CONTEXT_CANDIDATES);
   if (allCandidates.length < 2) {
     return insufficientEvidence(
       allCandidates,
@@ -470,8 +467,9 @@ export async function runDemoReconstruction(options: {
         author_id: fragment.authorUserId,
         timestamp: fragment.capturedAt,
         type: fragment.type,
-        caption: fragment.caption,
-        semantic_summary: fragment.semanticSummary,
+        caption: fragment.caption?.slice(0, 500) ?? null,
+        semantic_summary: fragment.semanticSummary.slice(0, 500),
+        entities: fragment.entityKeys.slice(0, 20),
         retrieval_score: fragment.retrievalScore,
       })),
       constraints: [

@@ -25,27 +25,26 @@ Text capture -> validate -> Mongo Fragment/ProcessingJob
   -> member confirm/reject/correct -> evaluation example -> gated Tinker study
 ```
 
-This is the intended architecture, not a claim that every integration is currently active. The current app accepts text fragments only; media upload/retrieval and object storage have been removed. It has private-by-default access boundaries, a local Gemma demo, and a Temporal worker skeleton.
+This is the intended architecture, not a claim that every integration is currently active. The current app accepts text fragments only; media upload/retrieval and object storage have been removed. Consent-gated text analysis, private-by-default access boundaries, a local Gemma demo, and Temporal worker processing are implemented.
 
 ## 1. Ingestion and provenance
 
 The authenticated API binds each text submission to the current user and requested group. It validates text length, capture timestamp/timezone, visibility, and consent. It creates a stable idempotency key, Mongo Fragment, and ProcessingJob.
 
-MongoDB stores the canonical text Fragment fields: author, group, source, capture time and timezone, visibility, AI consent, processing version/status, and deletion state. New fragments remain private and AI processing stays off unless the member explicitly opts in. Legacy media metadata may remain in MongoDB, but source bytes are unavailable through the app.
+MongoDB stores the canonical text Fragment fields: author, group, source, capture time and timezone, visibility, AI consent, processing version/status, and deletion state. New fragments remain private and AI processing stays off unless the member explicitly opts in. The `fragment_analyses` collection stores the analysis contract/version, configured Gemma model tag, a checksum of the source text, and quoted source evidence. Legacy media metadata may remain in MongoDB, but source bytes are unavailable through the app.
 
 Media upload and retrieval are disabled. Any pre-existing objects in a former bucket require manual cleanup; text processing uses MongoDB and Temporal only.
 
 ## 2. Observation: Gemma sees
 
-For eligible fragments, a worker calls local Gemma with only authorized text and the extraction schema. Gemma returns a structured Observation containing, when supported:
+For an active text fragment with explicit AI consent, a worker calls local Gemma with only that text and the extraction schema. The output is validated against the source fragment ID and exact evidence spans before it is persisted as a versioned FragmentAnalysis. A revoked or deleted fragment is not indexed; group visibility and AI consent are rechecked before and after the Tiger projection write.
 
-- visible objects, activity, scene, and text/OCR evidence;
-- location clues and time clues with source offsets/metadata;
-- possible entity references or group aliases, never an asserted real-world identity;
-- direct observations versus inferred interpretations;
-- uncertainty, missing evidence, and model/version provenance.
+- source-quoted people/place/object/activity/tone/reference facts;
+- literal entities and bounded summary/hints derived from the text;
+- per-fact and overall model confidence signals, with `possible` or `unknown` status only;
+- source ID, analysis version, configured model tag, and checksum provenance.
 
-For video, inspect only the documented short-video sample/keyframes after Phase 2 limits are validated; do not pass an archive or every frame. Never identify a person by face without separately approved consent/safety design. Malformed output is rejected or retried; it is not persisted as a fact.
+The current feature does not analyze media. If media is reintroduced under a separate storage decision, video analysis must inspect only a documented short-video keyframe sample; it must never pass an archive or every frame. Do not identify a person by face. Malformed or unsupported output is rejected and retried, not persisted as fact.
 
 For opted-in voice notes, a separate activity may send only the source audio and minimum options to ElevenLabs STT after account terms/retention and spend/consent gates pass. Store transcript, speaker labels, and word timestamps as derived evidence linked to the audio. Speaker labels are local transcript labels, not identity. The author reviews transcript content before group retrieval. Until that gate passes, voice processing remains disabled.
 
@@ -53,20 +52,22 @@ For opted-in voice notes, a separate activity may send only the source audio and
 
 Persist Observation claims and graph edges in MongoDB with source Fragment IDs, group, extractor version, and provenance. Project only active, group-visible, AI-consented fields into Tiger. Remove or invalidate projections when visibility, consent, or deletion changes.
 
-Candidate retrieval happens before reasoning and combines:
+Candidate retrieval is implemented as a group-scoped, bounded projection and combines:
 
 - hard group, active-state, visibility, consent, and time-window filters;
 - time distance and capture density;
-- semantic similarity only after an embedding model, dimensions, license, and retrieval-quality test are selected;
-- lexical matching as a current fallback;
-- MongoDB shared entity/place/person-alias and existing Moment/Story relationships;
+- lexical matching over generated analysis summaries;
+- overlap in extracted entity phrases, treated as candidate signals rather than confirmed aliases;
+- indexed Moment links when available;
+- vector semantic similarity only after an embedding model, dimensions, license, and retrieval-quality test are selected; none is currently selected;
+- confirmed entity/place/person-alias relationships only after that domain model exists;
 - a few relevant, confirmed Backboard meanings (nicknames, inside jokes, recurring references).
 
 MongoDB remains the graph authority. Tiger is a derived retrieval index, not a store of permissions. Backboard is semantic group context, not a duplicate graph or a place for speculative claims. A failed Backboard read degrades to no semantic context; it never blocks core reconstruction.
 
 ## 4. Context Packet
 
-Build a task-specific Packet from the smallest authorized candidate set. Include pseudonymous member keys only when they matter, candidate IDs/timestamps, compact Observations and provenance, known contradictions, relevant confirmed Backboard meanings, and explicit output constraints. Do not include raw unrelated history, private fragments, direct identifiers, or all Backboard memory. See [CONTEXT_ENGINEERING.md](CONTEXT_ENGINEERING.md) for packet budgets and boundaries.
+Build a task-specific Packet from the smallest authorized candidate set. The current builder caps the set at 12 fragments and includes pseudonymous member keys, candidate IDs/timestamps, bounded analysis summaries and source quotes, retrieval signals, and explicit output constraints. It does not include full source fragments, private fragments, or the author's account identifier; source excerpts may contain literal names included in a group-visible fragment. See [CONTEXT_ENGINEERING.md](CONTEXT_ENGINEERING.md) for packet budgets and boundaries.
 
 ## 5. Evidence scoring and Gemma investigation
 

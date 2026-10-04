@@ -57,7 +57,7 @@ export function GroupDetail({
           );
           if (!response.ok) return;
           const result = await response.json() as { status?: GroupFragmentView["processingJobStatus"] };
-          if (!cancelled && result.status) {
+          if (!cancelled && "status" in result) {
             setFragments((current) => current.map((item) =>
               item.id === fragment.id ? { ...item, processingJobStatus: result.status ?? null } : item,
             ));
@@ -158,6 +158,17 @@ export function GroupDetail({
                       fragment.authorUserId === currentUserId ||
                       ((memberRole === "owner" || memberRole === "admin") && fragment.visibility === "group")
                     }
+                    onUpdated={(update) => setFragments((current) => current.map((item) =>
+                      item.id === update.fragmentId
+                        ? {
+                            ...item,
+                            visibility: update.visibility,
+                            aiProcessingConsent: update.aiProcessingConsent,
+                            processingVersion: update.processingVersion,
+                            processingJobStatus: update.processingJobStatus,
+                          }
+                        : item,
+                    ))}
                     onDeleted={(fragmentId) => {
                       if (fragments.some((item) => item.id === fragmentId && item.source === "upload")) {
                         setLegacyMediaCleanupRequired(true);

@@ -144,14 +144,16 @@ The project can continue on local Gemma and synthetic demo data while these acco
 
 ### Phase 3: Baseline intelligence and temporal/vector retrieval
 
-- Keep the local Ollama Gemma provider as the default path; add fragment-analysis contracts and model/version tracking.
-- Process photos/screenshots with supported image input. For short video, extract a small, documented set of keyframes and analyze only those; do not send whole archives or unnecessary frames.
-- Extract observations as uncertain AI data: visible/textual content, likely activity, candidate place/entity references, and source/evidence IDs. Do not identify a person by face without a separately approved consent and safety design.
-- Select and document a local embedding model after a small retrieval-quality test. Include dimensions, latency, license, and compatibility with Tiger Data. Keep a no-vector temporal/lexical fallback.
-- Write only group-visible eligible fragment projections to Tiger Data. Rank by time, semantic similarity, shared confirmed entities/aliases, and known moment links.
-- Build a bounded ContextPacket with a top-N candidate cap and evidence/visibility constraints.
+**Current implementation status:** Consent-gated text analysis now uses a validated, versioned Gemma contract. Analysis records include source quotes, source-text checksum, configured model tag, and analysis version. Only active, group-visible, AI-consented text is projected to Tiger; retrieval rechecks eligibility in MongoDB and ranks a bounded candidate set by time, lexical overlap, extracted-entity overlap, and indexed Moment links. Context packets are capped at 12 fragments and carry compact analysis excerpts, never the full source fragments.
 
-**Exit gate:** the same-event versus unrelated-event evaluation set demonstrates better retrieval than the current temporal/lexical demo without cross-group or private-fragment leakage.
+- Keep the local Ollama Gemma provider as the default path; add fragment-analysis contracts and model/version tracking.
+- Keep media analysis deferred: uploads and object storage are disabled by Decision 16. Reintroducing images/video requires an approved storage design; video must then use a documented, small keyframe sample rather than whole archives.
+- Extract text observations as uncertain AI data with source-quoted evidence, candidate places/entities, and model/version provenance. Do not infer identity or treat extracted entities as confirmed aliases.
+- Run the same-event retrieval comparison on a labeled dataset before selecting an embedding model. No local Ollama service or labeled real-fragment dataset was available during this implementation, so vector embeddings remain unselected and retrieval keeps its no-vector fallback.
+- Write only active, group-visible, AI-consented fragment projections to Tiger Data. Current ranking uses time, lexical overlap, extracted-entity overlap, and indexed Moment links; confirmed alias ranking depends on the future confirmed-entity model.
+- Build bounded ContextPackets from authorized analyses with a 12-fragment cap, pseudonymous author keys, evidence quotes, and no full raw source fragments.
+
+**Exit gate:** the checked-in synthetic ranking fixture demonstrates the entity/moment-aware reranker can beat a temporal/lexical distractor case. The same-event versus unrelated-event gate on a labeled real-fragment set, a measured embedding-model choice, and live cross-group integration checks remain open.
 
 ### Phase 4: Moment reconstruction, evidence, and correction
 

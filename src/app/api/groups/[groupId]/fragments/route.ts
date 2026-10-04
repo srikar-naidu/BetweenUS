@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { apiErrorResponse } from "@/lib/api/errors";
 import { requireGroupMembership } from "@/lib/auth/group-access";
+import { FRAGMENT_ANALYSIS_VERSION } from "@/lib/ai/fragment-analysis";
 import { FragmentInputError, validateTextFragment } from "@/lib/ingestion/fragment-validation";
 import { getMongoDatabase } from "@/lib/db/mongodb";
 import { startFragmentWorkflow, getTemporalClient, TemporalConfigurationError } from "@/lib/processing/temporal-client";
@@ -28,7 +29,7 @@ export async function GET(
       {
         fragments: fragments.map(({ storageUri: _storageUri, ...fragment }) => ({
           ...fragment,
-          processingJobStatus: statuses.get(fragment.id) ?? null,
+          processingJobStatus: fragment.aiProcessingConsent ? statuses.get(fragment.id) ?? null : null,
         })),
       },
       { headers: { "Cache-Control": "no-store" } },
@@ -79,19 +80,23 @@ export async function POST(
     if (existingFragment) {
       const existingJob = await ingestionRepository.findProcessingJob(
         groupId,
-        `ingest:${groupId}:${fragmentId}:ingest-v1`,
+        `ingest:${groupId}:${fragmentId}:${existingFragment.processingVersion}`,
       );
-      if (existingJob) {
-        const { storageUri: _storageUri, ...visibleFragment } = existingFragment;
-        return Response.json({
-          fragment: { ...visibleFragment, processingJobStatus: existingJob.status },
-          jobId: existingJob.id,
-          workflowId: existingJob.temporalWorkflowId,
-          processingStatus: existingJob.status,
-        }, { headers: { "Cache-Control": "no-store" } });
-      }
+      const { storageUri: _storageUri, ...visibleFragment } = existingFragment;
+      return Response.json({
+        fragment: {
+          ...visibleFragment,
+          processingJobStatus: existingFragment.aiProcessingConsent ? existingJob?.status ?? null : null,
+        },
+        jobId: existingFragment.aiProcessingConsent ? existingJob?.id ?? null : null,
+        workflowId: existingFragment.aiProcessingConsent ? existingJob?.temporalWorkflowId ?? null : null,
+        processingStatus: existingFragment.aiProcessingConsent ? existingJob?.status ?? null : null,
+      }, { headers: { "Cache-Control": "no-store" } });
     }
-    await getTemporalClient();
+    if (input.aiProcessingConsent) await getTemporalClient();
+    const processingVersion = input.aiProcessingConsent
+      ? `${FRAGMENT_ANALYSIS_VERSION}-${Date.now()}`
+      : FRAGMENT_ANALYSIS_VERSION;
     const fragment = await memoryRepository.createFragment({
       id: fragmentId,
       groupId,
@@ -105,8 +110,20 @@ export async function POST(
       capturedTimeZone: input.capturedTimeZone,
       visibility: input.visibility,
       aiProcessingConsent: input.aiProcessingConsent,
-      processingVersion: "ingest-v1",
+      processingVersion,
     });
+    if (!input.aiProcessingConsent) {
+      const { storageUri: _storageUri, ...visibleFragment } = fragment;
+      return Response.json(
+        {
+          fragment: { ...visibleFragment, processingJobStatus: null },
+          jobId: null,
+          workflowId: null,
+          processingStatus: null,
+        },
+        { status: 201, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     const job = await ingestionRepository.upsertProcessingJob({
       groupId,
       fragmentId: fragment.id,
