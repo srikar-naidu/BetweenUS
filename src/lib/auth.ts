@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
 import { organization } from "better-auth/plugins";
+import type { Db } from "mongodb";
 import { getMongoClient } from "@/lib/db/mongodb";
 
 type AuthInstance = Awaited<ReturnType<typeof createAuth>>;
@@ -15,6 +16,44 @@ const globalForAuth = globalThis as typeof globalThis & {
 };
 
 const cache = (globalForAuth.betweenUsAuth ??= {});
+
+const pluralizedOrganizationCollections = [
+  ["groupss", "groups"],
+  ["group_memberss", "group_members"],
+  ["group_invitationss", "group_invitations"],
+] as const;
+
+async function migratePluralizedOrganizationCollections(database: Db): Promise<void> {
+  const migrationId = "better-auth-organization-collection-names-v1";
+  const migrations = database.collection<{ _id: string; status: string }>("betweenus_migrations");
+  const completed = await migrations.findOne({ _id: migrationId, status: "completed" });
+  if (completed) return;
+
+  for (const [sourceName, targetName] of pluralizedOrganizationCollections) {
+    const sourceExists = await database.listCollections(
+      { name: sourceName },
+      { nameOnly: true },
+    ).hasNext();
+    if (!sourceExists) continue;
+
+    await database.collection(sourceName).aggregate([
+      {
+        $merge: {
+          into: targetName,
+          on: "_id",
+          whenMatched: "keepExisting",
+          whenNotMatched: "insert",
+        },
+      },
+    ]).toArray();
+  }
+
+  await migrations.updateOne(
+    { _id: migrationId },
+    { $set: { status: "completed" } },
+    { upsert: true },
+  );
+}
 
 export class AuthConfigurationError extends Error {
   constructor(message: string) {
@@ -94,6 +133,7 @@ async function createAuth() {
   const client = getMongoClient();
   await client.connect();
   const database = client.db(process.env.MONGODB_DB_NAME ?? "between_us");
+  await migratePluralizedOrganizationCollections(database);
 
   return betterAuth({
     appName: "Between Us",
@@ -133,7 +173,7 @@ async function createAuth() {
         },
         schema: {
           organization: {
-            modelName: "groups",
+            modelName: "group",
             additionalFields: {
               description: { type: "string", required: false, input: true },
               lifecycleStatus: {
@@ -149,8 +189,8 @@ async function createAuth() {
               },
             },
           },
-          member: { modelName: "group_members" },
-          invitation: { modelName: "group_invitations" },
+          member: { modelName: "group_member" },
+          invitation: { modelName: "group_invitation" },
         },
       }),
     ],

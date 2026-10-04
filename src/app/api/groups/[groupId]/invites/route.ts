@@ -1,6 +1,7 @@
 import { getAuth } from "@/lib/auth";
 import { apiErrorResponse } from "@/lib/api/errors";
 import { requireGroupMembership } from "@/lib/auth/group-access";
+import { isAPIError } from "better-auth/api";
 
 export const runtime = "nodejs";
 
@@ -35,7 +36,7 @@ export async function POST(
     const auth = await getAuth();
     const result = await auth.api.createInvitation({
       headers: request.headers,
-      body: { organizationId: groupId, email, role: "member" },
+      body: { organizationId: groupId, email, role: "member", resend: true },
     });
     const baseUrl = process.env.BETTER_AUTH_URL;
     if (!baseUrl) {
@@ -50,6 +51,35 @@ export async function POST(
       { status: 201, headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
+    if (isAPIError(error)) {
+      const code =
+        typeof error.body === "object" && error.body !== null && "code" in error.body
+          ? error.body.code
+          : undefined;
+      const message =
+        code === "USER_IS_ALREADY_A_MEMBER_OF_THIS_ORGANIZATION"
+          ? "That email is already a member of this space. Enter a different email to invite someone new."
+          : typeof error.body === "object" &&
+              error.body !== null &&
+              "message" in error.body &&
+              typeof error.body.message === "string"
+            ? error.body.message
+            : "The invitation could not be created.";
+      return Response.json(
+        { error: message },
+        { status: error.statusCode >= 400 && error.statusCode < 500 ? error.statusCode : 502 },
+      );
+    }
+    console.error("Group invitation creation failed", {
+      name: error instanceof Error ? error.name : "UnknownError",
+      code:
+        typeof error === "object" &&
+        error !== null &&
+        "code" in error &&
+        (typeof error.code === "string" || typeof error.code === "number")
+          ? error.code
+          : undefined,
+    });
     return apiErrorResponse(error);
   }
 }

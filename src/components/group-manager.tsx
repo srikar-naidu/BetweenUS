@@ -26,14 +26,14 @@ export function GroupManager({ initialGroups }: Props) {
   const [description, setDescription] = useState("");
   const [inviteEmails, setInviteEmails] = useState<Record<string, string>>({});
   const [inviteLinks, setInviteLinks] = useState<Record<string, string>>({});
-  const [notice, setNotice] = useState<string | null>(null);
+  const [inviteErrors, setInviteErrors] = useState<Record<string, string>>({});
+  const [inviteMessages, setInviteMessages] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   function createGroup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    setNotice(null);
     startTransition(async () => {
       try {
         const response = await fetch("/api/groups", {
@@ -55,8 +55,8 @@ export function GroupManager({ initialGroups }: Props) {
 
   function inviteMember(event: FormEvent<HTMLFormElement>, groupId: string) {
     event.preventDefault();
-    setError(null);
-    setNotice(null);
+    setInviteErrors((current) => ({ ...current, [groupId]: "" }));
+    setInviteMessages((current) => ({ ...current, [groupId]: "" }));
     startTransition(async () => {
       try {
         const response = await fetch(`/api/groups/${groupId}/invites`, {
@@ -68,9 +68,15 @@ export function GroupManager({ initialGroups }: Props) {
         if (!response.ok || !result.inviteUrl) throw new Error(result.error ?? "Could not create invitation");
         setInviteLinks((current) => ({ ...current, [groupId]: result.inviteUrl! }));
         setInviteEmails((current) => ({ ...current, [groupId]: "" }));
-        setNotice("Invitation created. Share the link with the invited email address.");
+        setInviteMessages((current) => ({
+          ...current,
+          [groupId]: "Invite link created. Share it with that email address.",
+        }));
       } catch (caught) {
-        setError(caught instanceof Error ? caught.message : "Could not create invitation");
+        setInviteErrors((current) => ({
+          ...current,
+          [groupId]: caught instanceof Error ? caught.message : "Could not create invitation",
+        }));
       }
     });
   }
@@ -97,13 +103,20 @@ export function GroupManager({ initialGroups }: Props) {
                     id={`invite-${group.id}`}
                     type="email"
                     required
-                    autoComplete="email"
+                    autoComplete="off"
                     placeholder="friend@email.com"
                     value={inviteEmails[group.id] ?? ""}
-                    onChange={(event) =>
-                      setInviteEmails((current) => ({ ...current, [group.id]: event.target.value }))
-                    }
+                    aria-describedby={`invite-help-${group.id}`}
+                    onChange={(event) => {
+                      setInviteEmails((current) => ({ ...current, [group.id]: event.target.value }));
+                      setInviteLinks((current) => ({ ...current, [group.id]: "" }));
+                      setInviteErrors((current) => ({ ...current, [group.id]: "" }));
+                      setInviteMessages((current) => ({ ...current, [group.id]: "" }));
+                    }}
                   />
+                  <span className="invite-help" id={`invite-help-${group.id}`}>
+                    Use an email address that isn&apos;t already in this space.
+                  </span>
                   <button className="secondary-button" disabled={isPending}>Create invite link</button>
                   {inviteLinks[group.id] && (
                     <input
@@ -112,6 +125,12 @@ export function GroupManager({ initialGroups }: Props) {
                       value={inviteLinks[group.id]}
                       onFocus={(event) => event.currentTarget.select()}
                     />
+                  )}
+                  {inviteErrors[group.id] && (
+                    <p className="error-message invite-feedback" role="alert">{inviteErrors[group.id]}</p>
+                  )}
+                  {inviteMessages[group.id] && (
+                    <p className="success-message invite-feedback" role="status">{inviteMessages[group.id]}</p>
                   )}
                 </form>
                 )}
@@ -216,7 +235,6 @@ export function GroupManager({ initialGroups }: Props) {
         >
           Sign out
         </button>
-        {notice && <p className="success-message" role="status">{notice}</p>}
         {error && <p className="error-message" role="alert">{error}</p>}
       </section>
     </div>
