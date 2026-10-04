@@ -1,17 +1,10 @@
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
-import { getAuth, getAuthConfigurationStatus } from "@/lib/auth";
-import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { getAuthConfigurationStatus } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export default async function SignInPage() {
+export default function SignInPage() {
   const configuration = getAuthConfigurationStatus();
-  if (configuration.configured) {
-    const auth = await getAuth();
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (session) redirect("/home");
-  }
 
   return (
     <main className="shell trust-page" id="main-content">
