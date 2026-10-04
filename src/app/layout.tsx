@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Barlow_Semi_Condensed, Martian_Mono } from "next/font/google";
 import Link from "next/link";
 import { MemoryNavigation } from "@/components/memory-navigation";
+import { StoryAudioControls } from "@/components/story-audio-controls";
 import "./globals.css";
 
 const displayFont = Barlow_Semi_Condensed({
@@ -34,6 +35,7 @@ export default function RootLayout({
           <MemoryNavigation />
         </header>
         {children}
+        <StoryAudioControls />
       </body>
     </html>
   );

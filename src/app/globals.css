@@ -2021,6 +2021,39 @@ body {
   .friends-list { grid-template-columns: minmax(0, 1fr); }
   .friend-discovery-setting { padding: 15px; }
 }
+
+.story-audio-controls {
+  width: min(100% - 2rem, 72rem);
+  margin: 0 auto 2rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--line, rgba(24, 56, 43, 0.2));
+  border-radius: 1rem;
+  background: var(--paper, #fffdf7);
+  color: var(--ink, #18382b);
+  display: grid;
+  gap: 0.8rem;
+}
+
+.story-audio-copy p {
+  margin: 0.25rem 0 0;
+}
+
+.story-audio-actions {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.story-audio-actions label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.story-audio-controls audio {
+  width: 100%;
+}
 @media (max-width: 460px) {
   .memory-site-header { width: calc(100% - 20px); min-height: 64px; }
   .memory-site-header > .wordmark { font-size: 18px; }

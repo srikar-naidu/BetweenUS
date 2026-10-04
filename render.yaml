@@ -36,6 +36,16 @@ services:
         value: "3600"
       - key: ELEVENLABS_MONTHLY_REQUESTS
         value: "60"
+      - key: ELEVENLABS_TRANSCRIPTION_ENABLED
+        value: "true"
+      - key: ELEVENLABS_STORY_AUDIO_ENABLED
+        value: "true"
+      - key: ELEVENLABS_STORY_AUDIO_VOICE_ID
+        value: JBFqnCBsd6RMkjVDRZzb
+      - key: ELEVENLABS_STORY_AUDIO_MONTHLY_LIMIT
+        value: "10"
+      - key: ELEVENLABS_STORY_AUDIO_TIMEOUT_MS
+        value: "180000"
       - key: OLLAMA_HOST
         fromService:
           type: pserv
@@ -68,6 +78,16 @@ services:
         value: "3600"
       - key: ELEVENLABS_MONTHLY_REQUESTS
         value: "60"
+      - key: ELEVENLABS_TRANSCRIPTION_ENABLED
+        value: "true"
+      - key: ELEVENLABS_STORY_AUDIO_ENABLED
+        value: "true"
+      - key: ELEVENLABS_STORY_AUDIO_VOICE_ID
+        value: JBFqnCBsd6RMkjVDRZzb
+      - key: ELEVENLABS_STORY_AUDIO_MONTHLY_LIMIT
+        value: "10"
+      - key: ELEVENLABS_STORY_AUDIO_TIMEOUT_MS
+        value: "180000"
       - key: OLLAMA_HOST
         fromService:
           type: pserv
@@ -118,8 +138,6 @@ envVarGroups:
       - key: GEMMA_TIMEOUT_MS
         value: "300000"
       - key: SENTRY_ENABLED
-        value: "false"
+        value: "true"
       - key: NEXT_PUBLIC_SENTRY_ENABLED
-        value: "false"
-      - key: ELEVENLABS_TRANSCRIPTION_ENABLED
-        value: "false"
+        value: "true"

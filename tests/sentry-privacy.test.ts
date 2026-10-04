@@ -22,12 +22,12 @@ test("Sentry error events retain only generic errors and approved categories", (
     extra: { providerResponse: "private provider response" },
     contexts: { application: { content: "private fragment" } },
     breadcrumbs: [{ message: "private breadcrumb" }],
-    tags: { category: "temporal_activity_ingest_failure", user: "private-user" },
+    tags: { category: "backboard_operation_failure", user: "private-user" },
     exception: { values: [{ type: "Error", value: "provider response includes private data" }] },
   };
 
   const safeEvent = sanitizeSentryEvent(unsafeEvent);
-  assert.deepEqual(safeEvent.tags, { category: "temporal_activity_ingest_failure" });
+  assert.deepEqual(safeEvent.tags, { category: "backboard_operation_failure" });
   assert.deepEqual(safeEvent.exception?.values, [{
     type: "ApplicationError",
     value: "An application operation failed",
@@ -62,6 +62,23 @@ test("Sentry spans keep duration and opaque trace IDs but discard names and attr
   assert.deepEqual(safeSpan.links, []);
   assert.equal(safeSpan.start_timestamp, 1);
   assert.equal(safeSpan.end_timestamp, 2);
+});
+
+test("Sentry retains allowlisted integration span names and strips their attributes", () => {
+  const span: SentrySpan = {
+    trace_id: "opaque-trace",
+    span_id: "opaque-span",
+    name: "backboard.retrieve",
+    start_timestamp: 1,
+    end_timestamp: 2,
+    status: "ok",
+    is_segment: true,
+    attributes: { "db.query": "private group query" },
+    links: [],
+  };
+  const safeSpan = sanitizeSentrySpan(span);
+  assert.equal(safeSpan.name, "backboard.retrieve");
+  assert.deepEqual(safeSpan.attributes, {});
 });
 
 test("Sentry remains disabled unless explicitly enabled with a DSN", () => {

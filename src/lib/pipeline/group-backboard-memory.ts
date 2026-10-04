@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import * as Sentry from "@sentry/node";
 import type { Db } from "mongodb";
 import {
   BackboardApiError,
@@ -8,6 +9,7 @@ import {
 } from "@/lib/integrations/backboard-client";
 import { MongoBackboardRepository } from "@/lib/repositories/mongodb-backboard-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
+import { sentryIsEnabled } from "@/lib/observability/sentry-privacy";
 
 export class GroupBackboardMemoryError extends Error {
   constructor(
@@ -16,6 +18,23 @@ export class GroupBackboardMemoryError extends Error {
   ) {
     super(message);
     this.name = "GroupBackboardMemoryError";
+  }
+}
+
+async function tracedBackboardOperation<T>(
+  name: "backboard.retrieve" | "backboard.sync",
+  operation: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await Sentry.startSpan({ name, op: "db" }, operation);
+  } catch (error) {
+    if (sentryIsEnabled()) {
+      Sentry.withScope((scope) => {
+        scope.setTag("category", "backboard_operation_failure");
+        Sentry.captureException(new Error("Backboard operation failed"));
+      });
+    }
+    throw error;
   }
 }
 
@@ -39,14 +58,16 @@ async function awaitProviderOperation(
   repository: MongoBackboardRepository,
   input: { groupId: string; correctionId: string; operationId: string },
 ): Promise<Record<string, unknown>> {
-  return provider.waitForOperation(input.operationId, async (status) => {
-    await repository.updateMemoryState({
-      groupId: input.groupId,
-      correctionId: input.correctionId,
-      status: status === "pending" || status === "queued" ? "pending" : "running",
-      operationId: input.operationId,
-    });
-  });
+  return tracedBackboardOperation("backboard.sync", () =>
+    provider.waitForOperation(input.operationId, async (status) => {
+      await repository.updateMemoryState({
+        groupId: input.groupId,
+        correctionId: input.correctionId,
+        status: status === "pending" || status === "queued" ? "pending" : "running",
+        operationId: input.operationId,
+      });
+    }),
+  );
 }
 
 export async function enableGroupBackboard(input: {
@@ -63,7 +84,10 @@ export async function enableGroupBackboard(input: {
   try {
     const backboard = client(input.provider);
     const groupKey = createHash("sha256").update(input.groupId).digest("hex").slice(0, 10);
-    assistantId = await backboard.createGroupAssistant(groupKey);
+    assistantId = await tracedBackboardOperation(
+      "backboard.sync",
+      () => backboard.createGroupAssistant(groupKey),
+    );
     await repository.completeEnable(input.groupId, input.userId, assistantId);
     return "enabled";
   } catch (error) {
@@ -93,7 +117,14 @@ export async function disableGroupBackboard(input: {
   if (!integration) {
     throw new GroupBackboardMemoryError(409, "Backboard settings changed; reload and retry");
   }
-  if (integration.assistantId) await client(input.provider).deleteAssistant(integration.assistantId);
+  if (integration.assistantId) {
+    const provider = client(input.provider);
+    const assistantId = integration.assistantId;
+    await tracedBackboardOperation(
+      "backboard.sync",
+      () => provider.deleteAssistant(assistantId),
+    );
+  }
   await repository.completeDisable(input.groupId);
 }
 
@@ -110,6 +141,7 @@ export async function publishConfirmedCorrection(input: {
   if (integration?.status !== "enabled" || !integration.assistantId) {
     throw new GroupBackboardMemoryError(409, "Group Backboard memory is not enabled");
   }
+  const assistantId = integration.assistantId;
   const moment = await memoryRepository.findMoment(input.groupId, input.momentId);
   const correction = moment?.corrections?.find((item) => item.id === input.correctionId);
   if (!moment || moment.status !== "confirmed" || !correction) {
@@ -240,12 +272,14 @@ export async function publishConfirmedCorrection(input: {
       await backboardRepository.deleteMemoryLink(input.groupId, correction.id);
       throw new GroupBackboardMemoryError(409, "Backboard group memory was disabled before the correction could be shared");
     }
-    const result = await provider.addMemory({
-      assistantId: integration.assistantId,
-      content: link.content,
-      sourceKey: memorySourceKey(input.groupId, correction.id),
-      correctionType: correction.type,
-    });
+    const result = await tracedBackboardOperation("backboard.sync", () =>
+      provider.addMemory({
+        assistantId,
+        content: link.content,
+        sourceKey: memorySourceKey(input.groupId, correction.id),
+        correctionType: correction.type,
+      }),
+    );
     let memoryId = result.memoryId || null;
     if (result.operationId) {
       await backboardRepository.updateMemoryState({
@@ -271,14 +305,20 @@ export async function publishConfirmedCorrection(input: {
     const finalIntegration = await backboardRepository.findIntegration(input.groupId);
     if (
       finalIntegration?.status !== "enabled" ||
-      finalIntegration.assistantId !== integration.assistantId
+      finalIntegration.assistantId !== assistantId
     ) {
-      const deleteOperationId = await provider.deleteMemory({
-        assistantId: integration.assistantId,
-        memoryId,
-      });
+      const deleteOperationId = await tracedBackboardOperation(
+        "backboard.sync",
+        () => provider.deleteMemory({
+          assistantId,
+          memoryId,
+        }),
+      );
       if (deleteOperationId) {
-        await provider.waitForOperation(deleteOperationId, async () => undefined);
+        await tracedBackboardOperation(
+          "backboard.sync",
+          () => provider.waitForOperation(deleteOperationId, async () => undefined),
+        );
       }
       await backboardRepository.deleteMemoryLink(input.groupId, correction.id);
       throw new GroupBackboardMemoryError(409, "Backboard group memory was disabled while the correction was being shared");
@@ -380,7 +420,10 @@ export async function deleteCorrectionMemory(input: {
     operationKind: "delete",
   });
   try {
-    const operationId = await provider.deleteMemory({ assistantId, memoryId });
+    const operationId = await tracedBackboardOperation(
+      "backboard.sync",
+      () => provider.deleteMemory({ assistantId, memoryId }),
+    );
     if (operationId) {
       await repository.updateMemoryState({
         groupId: input.groupId,
@@ -446,14 +489,17 @@ export async function searchConfirmedGroupMemories(input: {
   const repository = new MongoBackboardRepository(input.database);
   const integration = await repository.findIntegration(input.groupId);
   if (integration?.status !== "enabled" || !integration.assistantId || !input.query.trim()) return [];
+  const assistantId = integration.assistantId;
   const provider = client(input.provider);
   let searchResults;
   try {
-    searchResults = await provider.searchMemories({
-      assistantId: integration.assistantId,
-      query: input.query.slice(0, 500),
-      limit: Math.min(Math.max(input.limit ?? 3, 1), 3),
-    });
+    searchResults = await tracedBackboardOperation("backboard.retrieve", () =>
+      provider.searchMemories({
+        assistantId,
+        query: input.query.slice(0, 500),
+        limit: Math.min(Math.max(input.limit ?? 3, 1), 3),
+      }),
+    );
   } catch (error) {
     if (!(error instanceof BackboardApiError) && !(error instanceof BackboardConfigurationError)) {
       throw error;

@@ -13,6 +13,7 @@ import { MongoEventStoryRepository } from "@/lib/repositories/mongodb-event-stor
 import { MongoEventStoryGenerationJobRepository } from "@/lib/repositories/mongodb-event-story-generation-job-repository";
 import { isManagedGroupMediaStorageUri, MongoGroupMediaStorage } from "@/lib/repositories/mongodb-group-media-storage";
 import { MongoAlbumCoverStorage } from "@/lib/repositories/mongodb-album-cover-storage";
+import { MongoStoryAudioRepository } from "@/lib/repositories/mongodb-story-audio-repository";
 
 export const runtime = "nodejs";
 
@@ -48,6 +49,7 @@ export async function DELETE(
     await new MongoStoryRepository(database).deleteGroup(groupId);
     await new MongoEventStoryRepository(database).deleteGroup(groupId);
     await new MongoEventStoryGenerationJobRepository(database).deleteGroup(groupId);
+    await new MongoStoryAudioRepository(database).deleteGroup(groupId);
     if (process.env.TIGER_DATABASE_URL) {
       await new TigerDataFragmentSearch().removeGroupFragments(groupId);
     }

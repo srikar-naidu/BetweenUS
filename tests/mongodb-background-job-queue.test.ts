@@ -79,6 +79,7 @@ test("claims queued jobs atomically and releases its lease", async () => {
     }],
     story_reconstruction_jobs: [],
     event_story_generation_jobs: [],
+    event_story_audio_jobs: [],
   });
   await queue.ensureIndexes();
 
@@ -107,6 +108,7 @@ test("reclaims an expired worker lease and increments the attempt count", async 
     }],
     story_reconstruction_jobs: [],
     event_story_generation_jobs: [],
+    event_story_audio_jobs: [],
   });
 
   const reclaimed = await queue.claimNext("worker-b");

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import * as Sentry from "@sentry/node";
 import type { Db } from "mongodb";
 import * as activities from "@/lib/processing/pipeline-activities";
+import { processEventStoryAudioJob } from "@/lib/processing/story-audio-worker";
 import {
   MongoBackgroundJobQueue,
   type ClaimedBackgroundJob,
@@ -51,8 +52,6 @@ function captureJobFailure(collection: string, category: string): void {
   if (!sentryIsEnabled()) return;
   Sentry.withScope((scope) => {
     scope.setTag("category", "processing_job_failure");
-    scope.setTag("job_collection", collection);
-    scope.setTag("failure_category", category);
     Sentry.captureException(new Error("Background processing job failed"));
   });
 }
@@ -198,6 +197,9 @@ async function processJob(job: ClaimedBackgroundJob): Promise<void> {
       case "event_story_generation_jobs":
         await processEventStoryJob(job, executionId);
         break;
+      case "event_story_audio_jobs":
+        await processEventStoryAudioJob(job);
+        break;
     }
   } catch (error) {
     if (job.collection === "processing_jobs") {
@@ -211,11 +213,13 @@ async function processJob(job: ClaimedBackgroundJob): Promise<void> {
         groupId: job.groupId,
         errorCategory: "background_worker_failed",
       });
-    } else {
+    } else if (job.collection === "event_story_generation_jobs") {
       await activities.markEventStoryGenerationFailed({
         jobId: job.id,
         errorCategory: "background_worker_failed",
       });
+    } else {
+      throw error;
     }
     captureJobFailure(job.collection, "background_worker_failed");
     throw error;

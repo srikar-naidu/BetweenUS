@@ -5,23 +5,28 @@ type SentrySpan = Parameters<NonNullable<NodeOptions["beforeSendSpan"]>>[0];
 export const SAFE_SENTRY_CATEGORIES = [
   "application_error",
   "next_request_failure",
-  "temporal_worker_failure",
-  "temporal_activity_job_status_failure",
-  "temporal_activity_ingest_failure",
-  "temporal_activity_transcription_failure",
-  "temporal_activity_reconstruction_failure",
-  "temporal_activity_deletion_failure",
+  "processing_worker_failure",
+  "processing_job_failure",
+  "background_worker_failure",
+  "backboard_operation_failure",
+  "elevenlabs_audio_generation_failure",
+  "story_audio_processing_failure",
 ] as const;
 
 export type SafeSentryCategory = (typeof SAFE_SENTRY_CATEGORIES)[number];
 
 const safeSpanNames = new Set([
   "operation",
-  "temporal.activity.job-status",
-  "temporal.activity.ingest",
-  "temporal.activity.transcription",
-  "temporal.activity.reconstruction",
-  "temporal.activity.deletion",
+  "worker.job.ingest",
+  "worker.job.voice-transcription",
+  "worker.job.moment-reconstruction",
+  "worker.job.story-reconstruction",
+  "worker.job.event-story-generation",
+  "worker.job.story-audio-generation",
+  "backboard.retrieve",
+  "backboard.sync",
+  "elevenlabs.text-to-speech",
+  "elevenlabs.music-generation",
 ]);
 
 export function sanitizeSentryEvent(event: ErrorEvent): ErrorEvent {

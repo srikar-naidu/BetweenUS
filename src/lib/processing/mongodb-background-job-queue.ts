@@ -5,6 +5,7 @@ const JOB_COLLECTIONS = [
   "processing_jobs",
   "story_reconstruction_jobs",
   "event_story_generation_jobs",
+  "event_story_audio_jobs",
 ] as const;
 
 type JobCollection = (typeof JOB_COLLECTIONS)[number];
@@ -16,6 +17,7 @@ export interface ClaimedBackgroundJob {
   jobType?: "ingest" | "delete_fragment" | "reconstruct_moment" | "transcribe_voice";
   fragmentId?: string;
   requesterUserId?: string;
+  storyRevision?: number;
   workerLeaseId: string;
   attemptCount: number;
 }
@@ -27,6 +29,7 @@ interface StoredJob extends Document {
   jobType?: ClaimedBackgroundJob["jobType"];
   fragmentId?: string;
   requesterUserId?: string;
+  storyRevision?: number;
   attemptCount?: number;
 }
 
@@ -41,6 +44,7 @@ export class MongoBackgroundJobQueue {
       processing_jobs: database.collection<StoredJob>("processing_jobs"),
       story_reconstruction_jobs: database.collection<StoredJob>("story_reconstruction_jobs"),
       event_story_generation_jobs: database.collection<StoredJob>("event_story_generation_jobs"),
+      event_story_audio_jobs: database.collection<StoredJob>("event_story_audio_jobs"),
     };
   }
 
@@ -87,6 +91,7 @@ export class MongoBackgroundJobQueue {
         ...(claimed.jobType ? { jobType: claimed.jobType } : {}),
         ...(claimed.fragmentId ? { fragmentId: String(claimed.fragmentId) } : {}),
         ...(claimed.requesterUserId ? { requesterUserId: String(claimed.requesterUserId) } : {}),
+        ...(typeof claimed.storyRevision === "number" ? { storyRevision: claimed.storyRevision } : {}),
         workerLeaseId: leaseId,
         attemptCount: typeof claimed.attemptCount === "number" ? claimed.attemptCount : 1,
       };
