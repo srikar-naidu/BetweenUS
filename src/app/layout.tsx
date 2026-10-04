@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Barlow_Semi_Condensed, Martian_Mono } from "next/font/google";
+import Link from "next/link";
+import { MemoryNavigation } from "@/components/memory-navigation";
 import "./globals.css";
 
 const displayFont = Barlow_Semi_Condensed({
@@ -26,7 +28,13 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${displayFont.variable} ${monoFont.variable}`}>
-      <body>{children}</body>
+      <body>
+        <header className="topbar memory-site-header">
+          <Link className="wordmark" href="/">between us<span>.</span></Link>
+          <MemoryNavigation />
+        </header>
+        {children}
+      </body>
     </html>
   );
 }

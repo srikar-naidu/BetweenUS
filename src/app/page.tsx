@@ -2,7 +2,6 @@ import { ReconstructionDemo } from "@/components/reconstruction-demo";
 import { getDemoFragments, getDemoMoments, getSampleDemoMoment } from "@/lib/pipeline/demo-reconstruction";
 import Image from "next/image";
 import Link from "next/link";
-import { MemoryNavigation } from "@/components/memory-navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -12,10 +11,6 @@ export default function Home() {
   return (
     <main className="shell home-shell" id="main-content">
       <a className="skip-link" href="#demo-fragments">Skip to the memory demonstration</a>
-      <header className="topbar">
-        <Link className="wordmark" href="/">between us<span>.</span></Link>
-        <MemoryNavigation active={null} />
-      </header>
       <section className="intro home-intro" id="atlas">
         <p className="eyebrow"><span className="eyebrow-mark" />WHEN EVERYONE REMEMBERS A LITTLE DIFFERENTLY</p>
         <div className="home-intro-grid">

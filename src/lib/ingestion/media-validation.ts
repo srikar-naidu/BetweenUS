@@ -83,6 +83,19 @@ export function validateGroupMedia(
   };
 }
 
+export type ValidatedAlbumCover = Omit<ValidatedGroupMedia, "type"> & { type: "image" };
+
+export function validateAlbumCover(
+  bytes: Uint8Array,
+  declaredMimeType: string,
+): ValidatedAlbumCover {
+  const media = validateGroupMedia(bytes, declaredMimeType);
+  if (media.type !== "image") {
+    throw new FragmentInputError("Album covers must be JPEG, PNG, or WebP images");
+  }
+  return { ...media, type: "image" };
+}
+
 export function validateMediaCaption(value: string): string | null {
   const caption = value.trim();
   if (caption.length > MAX_MEDIA_CAPTION_CHARACTERS) {

@@ -4,7 +4,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { AudioWaveform } from "@/components/audio-waveform";
-import { MemoryNavigation } from "@/components/memory-navigation";
 import { formatCaptureTime } from "@/lib/domain/format-time";
 import type { Fragment, MemberMoment } from "@/lib/domain/memory";
 
@@ -192,7 +191,6 @@ export function EventStoryEditor({
     <main className="shell trust-page event-story-page">
       <header className="topbar">
         <Link className="wordmark" href="/">between us<span>.</span></Link>
-        <MemoryNavigation active="albums" />
         <nav className="top-actions" aria-label="Album navigation">
           <Link href={`/groups/${groupId}`}>{groupName}</Link>
         </nav>

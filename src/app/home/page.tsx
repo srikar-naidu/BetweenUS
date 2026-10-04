@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
-import { MemoryNavigation } from "@/components/memory-navigation";
 import { getAuth, getAuthConfigurationStatus } from "@/lib/auth";
 import { listGroupsForUser } from "@/lib/auth/group-access";
 import { getMongoDatabase } from "@/lib/db/mongodb";
@@ -82,10 +81,6 @@ export default async function HomePage() {
 
   return (
     <main className="shell trust-page journal-page">
-      <header className="topbar">
-        <Link className="wordmark" href="/">between us<span>.</span></Link>
-        <MemoryNavigation active="home" />
-      </header>
       <section className="journal-welcome">
         <p className="eyebrow">YOUR SHARED PHOTO JOURNAL</p>
         <h1>A week at a time.</h1>

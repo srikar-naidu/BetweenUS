@@ -3,8 +3,6 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import type { FriendProfile } from "@/lib/domain/memory";
-import { MemoryNavigation } from "@/components/memory-navigation";
-import Link from "next/link";
 
 interface FriendsData {
   discoverable: boolean;
@@ -146,10 +144,6 @@ export function FriendsDirectory() {
 
   return (
     <main className="shell trust-page social-page">
-      <header className="topbar">
-        <Link className="wordmark" href="/">between us<span>.</span></Link>
-        <MemoryNavigation active="friends" />
-      </header>
       <section className="intro social-intro">
         <p className="eyebrow">YOUR PEOPLE, YOUR MEMORIES</p>
         <h1>Friends</h1>

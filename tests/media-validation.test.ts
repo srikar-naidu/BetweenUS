@@ -5,6 +5,7 @@ import {
   MAX_IMAGE_FILE_BYTES,
   MAX_MEDIA_CAPTION_CHARACTERS,
   MAX_VIDEO_FILE_BYTES,
+  validateAlbumCover,
   validateGroupMedia,
   validateMediaCaption,
 } from "../src/lib/ingestion/media-validation";
@@ -42,6 +43,15 @@ test("group media validation rejects unsupported MIME types and mismatched signa
     FragmentInputError,
   );
   assert.throws(() => validateGroupMedia(new Uint8Array(), "video/mp4"), FragmentInputError);
+});
+
+test("album covers accept validated images and reject videos", () => {
+  const photo = validateAlbumCover(bytesWithSignature([0xff, 0xd8, 0xff]), "image/jpeg");
+  assert.equal(photo.type, "image");
+  assert.throws(
+    () => validateAlbumCover(bytesWithSignature([0, 0, 0, 0, 0x66, 0x74, 0x79, 0x70]), "video/mp4"),
+    FragmentInputError,
+  );
 });
 
 test("group media validation enforces exact photo and video byte limits", () => {

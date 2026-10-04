@@ -22,6 +22,20 @@ services:
         sync: false
       - key: GOOGLE_CLIENT_SECRET
         sync: false
+      - key: BACKBOARD_API_KEY
+        sync: false
+      - key: BACKBOARD_API_BASE_URL
+        value: https://app.backboard.io/api
+      - key: BACKBOARD_TIMEOUT_MS
+        value: "30000"
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_TIMEOUT_MS
+        value: "60000"
+      - key: ELEVENLABS_MONTHLY_SECONDS
+        value: "3600"
+      - key: ELEVENLABS_MONTHLY_REQUESTS
+        value: "60"
       - key: OLLAMA_HOST
         fromService:
           type: pserv
@@ -52,6 +66,14 @@ services:
         sync: false
       - key: TIGER_DATABASE_URL
         sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_TIMEOUT_MS
+        value: "60000"
+      - key: ELEVENLABS_MONTHLY_SECONDS
+        value: "3600"
+      - key: ELEVENLABS_MONTHLY_REQUESTS
+        value: "60"
       - key: OLLAMA_HOST
         fromService:
           type: pserv

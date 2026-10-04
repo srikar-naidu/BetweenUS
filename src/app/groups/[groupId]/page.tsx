@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { GroupDetail, type GroupFragmentView } from "@/components/group-detail";
@@ -30,7 +29,6 @@ export default async function GroupPage({
   if (!configuration.configured) {
     return (
       <main className="shell trust-page">
-        <header className="topbar"><Link className="wordmark" href="/">between us<span>.</span></Link></header>
         <p className="setup-message">Authentication is not configured on this server.</p>
       </main>
     );

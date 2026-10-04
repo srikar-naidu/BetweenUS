@@ -12,6 +12,7 @@ import { MongoStoryRepository } from "@/lib/repositories/mongodb-story-repositor
 import { MongoEventStoryRepository } from "@/lib/repositories/mongodb-event-story-repository";
 import { MongoEventStoryGenerationJobRepository } from "@/lib/repositories/mongodb-event-story-generation-job-repository";
 import { isManagedGroupMediaStorageUri, MongoGroupMediaStorage } from "@/lib/repositories/mongodb-group-media-storage";
+import { MongoAlbumCoverStorage } from "@/lib/repositories/mongodb-album-cover-storage";
 
 export const runtime = "nodejs";
 
@@ -21,7 +22,7 @@ export async function DELETE(
 ) {
   try {
     const { groupId } = await context.params;
-    const { session } = await requireGroupMembership(
+    const { session, group } = await requireGroupMembership(
       request.headers,
       groupId,
       ["owner"],
@@ -29,6 +30,14 @@ export async function DELETE(
     );
     const database = await getMongoDatabase();
     await disableGroupBackboard({ database, groupId });
+    if (
+      typeof group.albumCover === "object" &&
+      group.albumCover !== null &&
+      "storageId" in group.albumCover &&
+      typeof group.albumCover.storageId === "string"
+    ) {
+      await new MongoAlbumCoverStorage(database).delete(group.albumCover.storageId, groupId);
+    }
     const repository = new MongoMemoryRepository(database);
     const ingestionRepository = new MongoIngestionRepository(database);
     const requested = await repository.requestGroupDeletion({
