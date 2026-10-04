@@ -11,9 +11,10 @@ export default async function GroupsPage() {
   const configuration = getAuthConfigurationStatus();
   if (!configuration.configured) {
     return (
-      <main className="shell trust-page">
+      <main className="shell trust-page" id="main-content">
+        <a className="skip-link" href="#groups-heading">Skip to group spaces</a>
         <header className="topbar"><Link className="wordmark" href="/">between us<span>.</span></Link></header>
-        <section className="trust-panel">
+        <section className="trust-panel" id="groups-heading" tabIndex={-1}>
           <h1>Group spaces</h1>
           <p className="setup-message">Authentication setup is incomplete: {configuration.missing.join(", ")}.</p>
           <Link className="secondary-button link-button" href="/sign-in">Sign in setup</Link>
@@ -30,12 +31,13 @@ export default async function GroupsPage() {
   const initialGroups: GroupSummary[] = await listGroupsForUser(requestHeaders);
 
   return (
-    <main className="shell trust-page">
+    <main className="shell trust-page" id="main-content">
+      <a className="skip-link" href="#groups-content">Skip to group spaces</a>
       <header className="topbar">
         <Link className="wordmark" href="/">between us<span>.</span></Link>
-        <span className="group-label">SIGNED IN / {session.user.email}</span>
+        <span className="group-label">SIGNED IN / PRIVATE SPACES</span>
       </header>
-      <section className="intro">
+      <section className="intro" id="groups-content" tabIndex={-1}>
         <p className="eyebrow">YOUR PRIVATE SPACES</p>
         <h1>Groups, not a feed.</h1>
         <p className="lede">Create a space for the people who shared the moment.</p>

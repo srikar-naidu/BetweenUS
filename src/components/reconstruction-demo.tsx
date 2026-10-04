@@ -21,6 +21,11 @@ const fragmentKinds: Record<Fragment["type"], string> = {
 };
 
 const names: Record<string, string> = { maya: "Maya", arjun: "Arjun", leah: "Leah" };
+const contributorTones: Record<string, string> = {
+  maya: "tone-1",
+  arjun: "tone-2",
+  leah: "tone-3",
+};
 
 const relationshipLabels: Record<MomentEvidence["relationship"], string> = {
   temporal: "Close in time",
@@ -63,20 +68,22 @@ export function ReconstructionDemo({ initialFragments, initialMoment }: Props) {
   }
 
   return (
-    <section className="workspace" aria-label="Moment reconstruction demo">
+    <section className="workspace demo-workspace" aria-label="Moment reconstruction demo">
       <div>
         <div className="section-head">
-          <h2>Fragments</h2>
-          <span>{fragments.length} contributed</span>
+          <div><p className="eyebrow">WHAT EVERYONE REMEMBERS</p><h2>Fragments</h2></div>
+          <span>{fragments.length.toString().padStart(2, "0")} contributed</span>
         </div>
-        <div className="fragment-list">
+        <div className="fragment-list demo-fragment-timeline">
           {fragments.map((fragment) => (
             <article className="fragment" key={fragment.id}>
-              <time>{formatCaptureTime(fragment.capturedAt)}</time>
+              <time className="fragment-time">{formatCaptureTime(fragment.capturedAt)}</time>
               <div>
                 <div className="fragment-meta">
-                  <span className="fragment-kind">{fragmentKinds[fragment.type]}</span>
-                  <span>{names[fragment.authorUserId] ?? fragment.authorUserId}</span>
+                  <span className="fragment-kind-chip">{fragmentKinds[fragment.type]}</span>
+                  <span className={`contributor-label ${contributorTones[fragment.authorUserId] ?? "tone-4"}`}>
+                    <span aria-hidden="true" />{names[fragment.authorUserId] ?? "Group member"}
+                  </span>
                 </div>
                 <p>{fragment.caption}</p>
               </div>
@@ -94,18 +101,20 @@ export function ReconstructionDemo({ initialFragments, initialMoment }: Props) {
             <h3 className="moment-title">{moment.title ?? "A possible moment"}</h3>
             <p className="moment-summary">{moment.summary}</p>
             <p className="empty-moment">{uncertaintyReason}</p>
-            <p className="evidence-title">Connected evidence</p>
-            <ul className="evidence-list">
-              {moment.evidence.map((item) => {
-                const source = fragments.find((fragment) => fragment.id === item.fragmentId);
-                return (
-                  <li key={item.fragmentId}>
-                    <strong>{relationshipLabels[item.relationship]}</strong>
-                    {source?.caption ?? item.fragmentId}
-                  </li>
-                );
-              })}
-            </ul>
+            <details className="moment-why" open>
+              <summary>Why these fragments connect <span aria-hidden="true">−</span></summary>
+              <ul className="evidence-list">
+                {moment.evidence.map((item) => {
+                  const source = fragments.find((fragment) => fragment.id === item.fragmentId);
+                  return (
+                    <li key={item.fragmentId}>
+                      <strong>{relationshipLabels[item.relationship]}</strong>
+                      {source?.caption ?? "Evidence source"}
+                    </li>
+                  );
+                })}
+              </ul>
+            </details>
             <div className="confidence">
               <span>Model confidence, not factual probability</span>
               <span>{Math.round(moment.confidence * 100)}%</span>

@@ -132,7 +132,7 @@ export function FragmentComposer({
   }
 
   return (
-    <section className="fragment-composer" aria-labelledby="fragment-composer-title">
+    <section className="fragment-composer" id="add-fragment" aria-labelledby="fragment-composer-title">
       <div className="section-head">
         <h2 id="fragment-composer-title">Add a fragment</h2>
         <span>Private by default</span>

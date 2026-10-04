@@ -13,6 +13,20 @@ export type GroupFragmentView = Omit<Fragment, "storageUri"> & {
   processingJobStatus: "queued" | "running" | "succeeded" | "failed" | "retrying" | null;
 };
 
+const relationshipLabels: Record<MemberMoment["evidence"][number]["relationship"], string> = {
+  temporal: "Close in time",
+  shared_people: "Shared people",
+  shared_location: "Shared place",
+  semantic_similarity: "Related content",
+  entity_overlap: "Shared details",
+};
+
+function contributorTone(authorUserId: string): string {
+  let hash = 0;
+  for (const character of authorUserId) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  return `tone-${hash % 5 + 1}`;
+}
+
 function MomentReviewControls({
   groupId,
   moment,
@@ -268,7 +282,11 @@ export function GroupDetail({
     correctionId: string;
     status: string;
   }>>([]);
-  const captionsById = new Map(fragments.map((fragment) => [fragment.id, fragment.caption]));
+  const fragmentsById = new Map(fragments.map((fragment) => [fragment.id, fragment]));
+  const contributorLabels = new Map(
+    [...new Set(fragments.map((fragment) => fragment.authorUserId))]
+      .map((authorUserId, index) => [authorUserId, `Contributor ${index + 1}`]),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -547,19 +565,37 @@ export function GroupDetail({
   }
 
   return (
-    <main className="shell trust-page">
+    <main className="shell trust-page group-page" id="main-content">
+      <a className="skip-link" href="#group-content">Skip to group timeline</a>
       <header className="topbar">
         <Link className="wordmark" href="/">between us<span>.</span></Link>
-        <Link className="group-label" href="/groups">ALL GROUPS</Link>
+        <nav className="top-actions" aria-label="Group navigation">
+          <Link href="/groups">All spaces</Link>
+          <Link href="#add-fragment">Add a memory <span aria-hidden="true">+</span></Link>
+        </nav>
       </header>
       <section className="intro">
-        <p className="eyebrow">PRIVATE GROUP</p>
+        <p className="eyebrow"><span className="eyebrow-mark" />PRIVATE GROUP / MEMORY ATLAS</p>
         <h1>{groupName}</h1>
+        <p className="lede">Fragments from your group, gathered in one place. What becomes a shared memory is always up to you.</p>
+        <div className="group-overview">
+          <span><strong>{fragments.length.toString().padStart(2, "0")}</strong> fragments</span>
+          <span><strong>{moments.length.toString().padStart(2, "0")}</strong> moments</span>
+          <span className="overview-private"><span aria-hidden="true">●</span> Private space</span>
+        </div>
       </section>
+      {!groupDeletionPending && (
+        <nav className="atlas-nav" aria-label="Sections in this group">
+          <a href="#add-fragment">Add a fragment <span aria-hidden="true">+</span></a>
+          <a href="#fragments">Fragments <span>{fragments.length.toString().padStart(2, "0")}</span></a>
+          <a href="#moments">Moments <span>{moments.length.toString().padStart(2, "0")}</span></a>
+          <a href="#group-memory">Group memory</a>
+        </nav>
+      )}
       {groupDeletionPending ? (
         <p className="setup-message" role="status">{groupDeletionMessage}</p>
       ) : (
-        <section className="group-detail-grid">
+        <section className="group-detail-grid" id="group-content" tabIndex={-1} aria-label="Group memory workspace">
           <div>
             <FragmentComposer
               groupId={groupId}
@@ -572,18 +608,24 @@ export function GroupDetail({
                 Media uploads are disabled. Previously uploaded media is unavailable here and any remaining bucket objects need manual cleanup.
               </p>
             )}
-            <div className="section-head"><h2>Fragments</h2><span>{fragments.length} visible to you</span></div>
-            <div className="fragment-list">
+            <div className="section-head" id="fragments">
+              <div><p className="eyebrow">THE SOURCE MATERIAL</p><h2>Fragments</h2></div>
+              <span>{fragments.length} visible to you</span>
+            </div>
+            <div className="fragment-list fragment-timeline">
               {fragments.map((fragment) => (
                 <article className="group-fragment" key={fragment.id}>
                   <div className="fragment-row">
-                    <time>{formatCaptureTime(fragment.capturedAt)}</time>
-                    <span>{fragment.type}</span>
-                    <span>{fragment.visibility}</span>
+                    <time className="fragment-time">{formatCaptureTime(fragment.capturedAt)}</time>
+                    <span className={`fragment-kind-chip ${contributorTone(fragment.authorUserId)}`}>{fragment.type === "voice" ? "Voice note" : "Text note"}</span>
+                    <span className={`visibility-chip visibility-${fragment.visibility}`}>{fragment.visibility === "private" ? "Only me" : fragment.visibility}</span>
                   </div>
-                  <p>{fragment.textContent ?? fragment.caption ?? (
+                  <p className="fragment-copy">{fragment.textContent ?? fragment.caption ?? (
                     fragment.type === "voice" ? "Voice note — transcript is private until you approve it." : "Media source is unavailable."
                   )}</p>
+                  <p className={`contributor-label ${contributorTone(fragment.authorUserId)}`}>
+                    <span aria-hidden="true" />{contributorLabels.get(fragment.authorUserId) ?? "Group member"}
+                  </p>
                   {fragment.type === "voice" && fragment.source === "upload" && (
                     <audio
                       controls
@@ -682,9 +724,12 @@ export function GroupDetail({
               {!fragments.length && <p className="empty-moment">This group has no fragments yet.</p>}
             </div>
           </div>
-          <div className="moment-panel">
-            <div className="section-head"><h2>Moments</h2><span>{moments.length} reconstructed</span></div>
-            <section className="group-memory-settings" aria-label="Group memory settings">
+          <div className="moment-panel" id="moments">
+            <div className="section-head">
+              <div><p className="eyebrow">MEMORIES TAKING SHAPE</p><h2>Moments</h2></div>
+              <span>{moments.length} reconstructed</span>
+            </div>
+            <section className="group-memory-settings" id="group-memory" aria-label="Group memory settings">
               <div>
                 <strong>Backboard group memory</strong>
                 <p>
@@ -722,24 +767,59 @@ export function GroupDetail({
             {reconstructionMessage && <p className="privacy-status" role="status">{reconstructionMessage}</p>}
             {moments.map((moment) => (
               <article className="group-moment" key={moment.id}>
-                <span className="moment-status">{moment.uncertaintyLabel}</span>
+                <div className="moment-card-head">
+                  <span className={`moment-status uncertainty-${moment.uncertaintyLabel}`}>{moment.uncertaintyLabel}</span>
+                  <span className="moment-state">{moment.status === "candidate" ? "Awaiting your review" : moment.status}</span>
+                </div>
                 <h3>{moment.title ?? "A possible moment"}</h3>
-                <p>{moment.summary}</p>
-                <ul className="evidence-list">
-                  {moment.evidence.map((evidence) => (
-                    <li key={evidence.fragmentId}>
-                      {captionsById.get(evidence.fragmentId) ?? "Evidence is not visible to this member"}
-                    </li>
-                  ))}
-                </ul>
-                {moment.reconstruction && (
-                  <div className="moment-analysis-notes">
+                <p className="moment-card-summary">{moment.summary}</p>
+                <ol className="moment-atlas" aria-label={`Evidence timeline for ${moment.title ?? "possible moment"}`}>
+                  {moment.evidence.map((evidence, index) => {
+                    const source = fragmentsById.get(evidence.fragmentId);
+                    return (
+                      <li className="atlas-stop" key={evidence.fragmentId}>
+                        <div className="atlas-stop-marker">
+                          <span className={`atlas-contributor ${source ? contributorTone(source.authorUserId) : "tone-1"}`}>
+                            {index + 1}
+                          </span>
+                        </div>
+                        <div className="atlas-stop-copy">
+                          <span className="atlas-stop-time">
+                            {source ? formatCaptureTime(source.capturedAt) : "Source unavailable"}
+                          </span>
+                          <p>{source?.textContent ?? source?.caption ?? "Evidence is not visible to this member"}</p>
+                          {source && (
+                            <span className={`contributor-label ${contributorTone(source.authorUserId)}`}>
+                              <span aria-hidden="true" />{contributorLabels.get(source.authorUserId) ?? "Group member"}
+                            </span>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+                <details className="moment-why">
+                  <summary>Why these fragments connect <span aria-hidden="true">+</span></summary>
+                  <ul className="evidence-list">
+                    {moment.evidence.map((evidence) => (
+                      <li key={evidence.fragmentId}>
+                        <strong>{relationshipLabels[evidence.relationship]}</strong>
+                        {fragmentsById.get(evidence.fragmentId)?.textContent ??
+                          fragmentsById.get(evidence.fragmentId)?.caption ??
+                          "Evidence is not visible to this member"}
+                      </li>
+                    ))}
+                  </ul>
+                  {moment.reconstruction && (
+                    <div className="moment-analysis-notes">
                     {moment.reconstruction.contradictions.map((item, index) => (
                       <div key={`contradiction-${index}`}>
                         <p><strong>Possible contradiction:</strong> {item.summary}</p>
                         {item.evidence.map((source) => (
                           <p key={source.fragmentId}>
-                            {captionsById.get(source.fragmentId) ?? "Evidence is not visible to this member"}: “{source.quote}”
+                            {fragmentsById.get(source.fragmentId)?.textContent ??
+                              fragmentsById.get(source.fragmentId)?.caption ??
+                              "Evidence is not visible to this member"}: “{source.quote}”
                           </p>
                         ))}
                       </div>
@@ -753,8 +833,9 @@ export function GroupDetail({
                     {moment.reconstruction.inferenceNotes.map((item, index) => (
                       <p key={`inference-${index}`}><strong>Inference:</strong> {item}</p>
                     ))}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </details>
                 <MomentReviewControls
                   groupId={groupId}
                   moment={moment}

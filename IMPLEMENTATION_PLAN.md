@@ -218,6 +218,8 @@ This is an MVP experiment deliverable, not a production dependency.
 
 Start the visual system in Phase 0 and implement it in parallel with the backend; do not leave all UX until the end.
 
+**Current implementation status:** The home demo, group list, sign-in, and authenticated group workspace now share a responsive Memory Atlas visual system with editorial typography, warm-paper/deep-green/cobalt/lime/coral tokens, explicit privacy labels, and visible uncertainty. Group fragments use a chronological contributor-coded rail; Moments surface evidence in a connected timeline and an expandable explanation layer, while existing confirm/reject/correction and group-memory controls remain available. Capture and review interactions retain their existing APIs, with labelled consent/privacy controls, keyboard focus/skip navigation, compact mobile layouts, reduced-motion support, and high-contrast/forced-colors affordances. The demo data is clearly marked synthetic. The usability exit gate still requires testing with at least three people who did not build the product; it has not been performed here.
+
 #### Visual direction: Memory Atlas
 
 Make the interface bold and emotionally alive, but keep evidence and privacy unmistakable. Avoid generic dashboard cards and avoid turning it into an ML console.

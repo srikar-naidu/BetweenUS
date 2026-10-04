@@ -6,12 +6,13 @@ export default function SignInPage() {
   const configuration = getAuthConfigurationStatus();
 
   return (
-    <main className="shell trust-page">
+    <main className="shell trust-page" id="main-content">
+      <a className="skip-link" href="#sign-in-content">Skip to sign in</a>
       <header className="topbar">
         <Link className="wordmark" href="/">between us<span>.</span></Link>
         <span className="group-label">PRIVATE GROUP MEMORY</span>
       </header>
-      <section className="trust-panel">
+      <section className="trust-panel" id="sign-in-content" tabIndex={-1}>
         <p className="eyebrow">MEMBERS ONLY</p>
         <h1>Sign in to your group.</h1>
         <p className="lede">Your text fragments and reconstructed moments stay inside the groups you join.</p>
