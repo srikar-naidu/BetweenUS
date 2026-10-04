@@ -76,7 +76,10 @@ export default function Home() {
           <figure className="launch-film-player">
             <div className="launch-film-video-frame">
               <video
+                autoPlay
                 controls
+                loop
+                muted
                 playsInline
                 preload="metadata"
                 poster="/cafeteria-moment.svg"
