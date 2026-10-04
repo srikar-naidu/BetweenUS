@@ -283,6 +283,20 @@ export class MongoMemoryRepository {
     return documents.map(asFragment);
   }
 
+  async findGroupAlbumCover(groupId: string): Promise<Fragment | null> {
+    const document = await this.fragments.find({
+      groupId,
+      visibility: "group",
+      deletionState: "active",
+      source: "upload",
+      type: { $in: ["image", "screenshot", "video"] },
+    })
+      .sort({ capturedAt: -1 })
+      .limit(1)
+      .next();
+    return document ? asFragment(document) : null;
+  }
+
   async updateFragmentPrivacy(input: {
     groupId: string;
     fragmentId: string;

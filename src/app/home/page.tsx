@@ -83,7 +83,7 @@ export default async function HomePage() {
   return (
     <main className="shell trust-page journal-page">
       <header className="topbar">
-        <Link className="wordmark" href="/home">between us<span>.</span></Link>
+        <Link className="wordmark" href="/">between us<span>.</span></Link>
         <MemoryNavigation active="home" />
       </header>
       <section className="journal-welcome">

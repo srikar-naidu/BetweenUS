@@ -26,6 +26,8 @@ The user experience is designed to answer: “We forgot this happened,” not �
 
 The signed-in experience also includes a weekly Home journal, Friends discovery, and Albums. Each group is an album; a friend connection alone never shares a person's posts or grants album access. Members can optionally let others find them by name. An album's Event story is a separate, editable recap built only from its currently member-visible, confirmed Moments; members choose which Moments to include and can edit the text before saving.
 
+Event stories are generated asynchronously by the same `GemmaService` through the Temporal worker. Gemma uses the current, consented fragment observations supporting the selected confirmed Moments: image observations, sampled video-frame observations, and author-reviewed voice transcripts. The story is returned as cited sections, and the application validates every evidence reference before saving. Raw voice recordings are not sent to Gemma; if an observation is missing, stale, or consent was revoked, generation fails rather than filling the gap. Configure and run the Temporal worker as described below.
+
 ## Core user experience
 
 1. Multiple people contribute text fragments from the same period.

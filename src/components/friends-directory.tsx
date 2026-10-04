@@ -147,7 +147,7 @@ export function FriendsDirectory() {
   return (
     <main className="shell trust-page social-page">
       <header className="topbar">
-        <Link className="wordmark" href="/home">between us<span>.</span></Link>
+        <Link className="wordmark" href="/">between us<span>.</span></Link>
         <MemoryNavigation active="friends" />
       </header>
       <section className="intro social-intro">

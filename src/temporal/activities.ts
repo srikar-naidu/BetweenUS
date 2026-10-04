@@ -11,11 +11,15 @@ import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoStoryRepository } from "@/lib/repositories/mongodb-story-repository";
+import { MongoEventStoryRepository } from "@/lib/repositories/mongodb-event-story-repository";
+import { MongoEventStoryGenerationJobRepository } from "@/lib/repositories/mongodb-event-story-generation-job-repository";
 import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-fragment-analysis-repository";
 import { indexEligibleFragmentAnalysis } from "@/lib/retrieval/index-fragment-analysis";
 import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
 import { reconstructMoment } from "@/lib/pipeline/moment-reconstruction";
 import { reconstructStoryConnection } from "@/lib/pipeline/story-reconstruction";
+import { generateEventStory, EventStoryGenerationError } from "@/lib/pipeline/event-story-generation";
+import { confirmedMomentsForEventStory } from "@/lib/auth/group-visibility";
 import { hasAnalyzableFragmentSource, hasApprovedTextSource } from "@/lib/domain/memory";
 import {
   ElevenLabsApiError,
@@ -331,6 +335,100 @@ export async function markStoryJobFailed(input: {
   errorCategory: string;
 }): Promise<void> {
   await new MongoStoryRepository(await getMongoDatabase()).markStoryJobFailed(input);
+}
+
+export async function markEventStoryGenerationRunning(input: {
+  jobId: string;
+  workflowId: string;
+}): Promise<void> {
+  await new MongoEventStoryGenerationJobRepository(await getMongoDatabase())
+    .markRunning(input.jobId, input.workflowId);
+}
+
+export async function generateEventStoryForGroup(input: { jobId: string }): Promise<void> {
+  const database = await getMongoDatabase();
+  const jobs = new MongoEventStoryGenerationJobRepository(database);
+  const job = await jobs.find(input.jobId);
+  if (!job) {
+    throw ApplicationFailure.nonRetryable("Event story generation job is unavailable", "EventStoryJobUnavailable");
+  }
+  if (job.status === "succeeded") return;
+  if (!ObjectId.isValid(job.groupId) || !ObjectId.isValid(job.requesterUserId)) {
+    throw ApplicationFailure.nonRetryable("Event story requester is unavailable", "RequesterUnavailable");
+  }
+  const [membership, group] = await Promise.all([
+    database.collection("group_members").findOne({
+      organizationId: new ObjectId(job.groupId),
+      userId: new ObjectId(job.requesterUserId),
+    }),
+    database.collection("groups").findOne({
+      _id: new ObjectId(job.groupId),
+      lifecycleStatus: "active",
+    }),
+  ]);
+  if (!membership || !group) {
+    throw ApplicationFailure.nonRetryable("Event story requester is no longer a group member", "MembershipUnavailable");
+  }
+
+  const memory = new MongoMemoryRepository(database);
+  const allMoments = await memory.listMoments(job.groupId, 100);
+  const selectedMomentIds = new Set(job.momentIds);
+  const selectedMoments = allMoments.filter((moment) => selectedMomentIds.has(moment.id));
+  const evidenceFragmentIds = [...new Set(selectedMoments.flatMap((moment) =>
+    moment.evidence.map((evidence) => evidence.fragmentId),
+  ))];
+  const fragments = await memory.findEligibleGroupVisibleFragmentsByIds(job.groupId, evidenceFragmentIds);
+  const eligibleMoments = confirmedMomentsForEventStory(selectedMoments, fragments);
+  if (
+    eligibleMoments.length !== job.momentIds.length ||
+    job.momentIds.some((momentId) => !eligibleMoments.some((moment) => moment.id === momentId))
+  ) {
+    throw ApplicationFailure.nonRetryable("Event story evidence or consent changed", "EventStoryEvidenceUnavailable");
+  }
+
+  const analyses = await new MongoFragmentAnalysisRepository(database).findMany(
+    job.groupId,
+    evidenceFragmentIds,
+    FRAGMENT_ANALYSIS_VERSION,
+  );
+  let generated;
+  try {
+    generated = await generateEventStory({
+      groupId: job.groupId,
+      moments: eligibleMoments,
+      fragments,
+      analyses,
+      generator: createGemmaService(),
+    });
+  } catch (error) {
+    if (error instanceof EventStoryGenerationError) {
+      throw ApplicationFailure.nonRetryable(error.message, "EventStoryGenerationInvalid");
+    }
+    throw error;
+  }
+  const saved = await new MongoEventStoryRepository(database).save({
+    groupId: job.groupId,
+    title: generated.title,
+    narrative: generated.narrative,
+    momentIds: generated.momentIds,
+    evidenceReferences: generated.evidenceReferences,
+    generatedByGemma: true,
+    generatedByJobId: job.id,
+    updatedBy: job.requesterUserId,
+    expectedRevision: job.expectedRevision,
+  });
+  if (!saved) {
+    throw ApplicationFailure.nonRetryable("The event story changed while Gemma was processing", "EventStoryRevisionConflict");
+  }
+  await jobs.markSucceeded(job.id);
+}
+
+export async function markEventStoryGenerationFailed(input: {
+  jobId: string;
+  errorCategory: string;
+}): Promise<void> {
+  await new MongoEventStoryGenerationJobRepository(await getMongoDatabase())
+    .markFailed(input.jobId, input.errorCategory);
 }
 
 export async function markProcessingJobSucceeded(input: {

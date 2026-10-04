@@ -6,7 +6,9 @@ import { GroupAccessError, requireGroupMembership } from "@/lib/auth/group-acces
 import { confirmedMomentsForEventStory, momentForGroupMember } from "@/lib/auth/group-visibility";
 import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MongoEventStoryRepository } from "@/lib/repositories/mongodb-event-story-repository";
+import { MongoEventStoryGenerationJobRepository } from "@/lib/repositories/mongodb-event-story-generation-job-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
+import { MAX_EVENT_STORY_MOMENTS } from "@/lib/pipeline/event-story-generation";
 import type { Fragment } from "@/lib/domain/memory";
 
 export const dynamic = "force-dynamic";
@@ -32,9 +34,10 @@ export default async function EventStoryPage({
   }
   const database = await getMongoDatabase();
   const memory = new MongoMemoryRepository(database);
-  const [allMoments, document] = await Promise.all([
+  const [allMoments, document, generationJob] = await Promise.all([
     memory.listMoments(groupId, 100),
     new MongoEventStoryRepository(database).find(groupId),
+    new MongoEventStoryGenerationJobRepository(database).findLatest(groupId, session.user.id),
   ]);
   const evidenceFragmentIds = [...new Set(allMoments.flatMap((moment) =>
     moment.evidence.map((evidence) => evidence.fragmentId),
@@ -47,8 +50,15 @@ export default async function EventStoryPage({
     title: document.title,
     narrative: document.narrative,
     momentIds: document.momentIds.filter((id) => momentIds.has(id)),
+    evidenceReferences: document.evidenceReferences ?? [],
+    generatedByGemma: document.generatedByGemma ?? false,
     revision: document.revision,
     updatedAt: document.updatedAt,
+  } : null;
+  const initialJob = generationJob ? {
+    id: generationJob.id,
+    status: generationJob.status,
+    errorCategory: generationJob.errorCategory,
   } : null;
   const sources: Array<Pick<Fragment, "id" | "type" | "source" | "caption" | "textContent" | "capturedAt" | "authorUserId">> =
     groupFragments.filter((fragment) => confirmedMoments.some((moment) =>
@@ -60,6 +70,8 @@ export default async function EventStoryPage({
       groupId={groupId}
       groupName={typeof access.group.name === "string" ? access.group.name : "Private album"}
       initialStory={initialStory}
+      initialJob={initialJob}
+      maxMoments={MAX_EVENT_STORY_MOMENTS}
       moments={confirmedMoments}
       sources={sources}
     />

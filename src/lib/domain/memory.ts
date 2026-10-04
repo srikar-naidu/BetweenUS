@@ -103,8 +103,28 @@ export interface EventStoryDocument {
   title: string;
   narrative: string;
   momentIds: string[];
+  evidenceReferences?: Array<{
+    claim: string;
+    fragmentIds: string[];
+    uncertainty: "grounded" | "uncertain";
+  }>;
+  generatedByGemma?: boolean;
+  generatedByJobId?: string | null;
   revision: number;
   updatedBy: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface EventStoryGenerationJob {
+  id: string;
+  groupId: string;
+  requesterUserId: string;
+  momentIds: string[];
+  expectedRevision: number;
+  status: "queued" | "running" | "succeeded" | "failed";
+  workflowId: string | null;
+  errorCategory: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

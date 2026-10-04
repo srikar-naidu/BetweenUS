@@ -17,6 +17,10 @@ export interface StoryReconstructionWorkflowInput {
   requesterUserId: string;
 }
 
+export interface EventStoryGenerationWorkflowInput {
+  jobId: string;
+}
+
 const runActivity = proxyActivities<typeof activities>({
   startToCloseTimeout: "1 minute",
   retry: {
@@ -50,6 +54,15 @@ const transcriptionActivity = proxyActivities<typeof activities>({
 });
 
 const storyActivity = proxyActivities<typeof activities>({
+  startToCloseTimeout: "10 minutes",
+  retry: {
+    initialInterval: "5 seconds",
+    maximumInterval: "30 seconds",
+    maximumAttempts: 2,
+  },
+});
+
+const eventStoryActivity = proxyActivities<typeof activities>({
   startToCloseTimeout: "10 minutes",
   retry: {
     initialInterval: "5 seconds",
@@ -224,6 +237,25 @@ export async function reconstructStoryWorkflow(
       jobId: input.jobId,
       groupId: input.groupId,
       errorCategory: "story_reconstruction_failed",
+    });
+    throw error;
+  }
+}
+
+export async function generateEventStoryWorkflow(
+  input: EventStoryGenerationWorkflowInput,
+): Promise<void> {
+  const workflowId = workflowInfo().workflowId;
+  try {
+    await eventStoryActivity.markEventStoryGenerationRunning({
+      jobId: input.jobId,
+      workflowId,
+    });
+    await eventStoryActivity.generateEventStoryForGroup({ jobId: input.jobId });
+  } catch (error) {
+    await eventStoryActivity.markEventStoryGenerationFailed({
+      jobId: input.jobId,
+      errorCategory: "event_story_generation_failed",
     });
     throw error;
   }

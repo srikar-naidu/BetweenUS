@@ -10,7 +10,13 @@ const eventStoryIndexes = (globalForEventStories.betweenUsEventStoryIndexes ??= 
 
 function asEventStory(record: StoredEventStory): EventStoryDocument {
   const { _id, ...story } = record;
-  return { ...story, id: _id };
+  return {
+    ...story,
+    id: _id,
+    evidenceReferences: story.evidenceReferences ?? [],
+    generatedByGemma: story.generatedByGemma ?? false,
+    generatedByJobId: story.generatedByJobId ?? null,
+  };
 }
 
 export class MongoEventStoryRepository {
@@ -47,10 +53,16 @@ export class MongoEventStoryRepository {
     momentIds: string[];
     updatedBy: string;
     expectedRevision: number;
+    evidenceReferences?: EventStoryDocument["evidenceReferences"];
+    generatedByGemma?: boolean;
+    generatedByJobId?: string | null;
   }): Promise<EventStoryDocument | null> {
     await this.ensureIndexes();
     const now = new Date();
     const existing = await this.stories.findOne({ groupId: input.groupId });
+    if (input.generatedByJobId && existing?.generatedByJobId === input.generatedByJobId) {
+      return asEventStory(existing);
+    }
     if (existing) {
       if ((existing.revision ?? 0) !== input.expectedRevision) return null;
       const result = await this.stories.updateOne(
@@ -61,6 +73,9 @@ export class MongoEventStoryRepository {
             narrative: input.narrative,
             momentIds: input.momentIds,
             updatedBy: input.updatedBy,
+            evidenceReferences: input.evidenceReferences ?? [],
+            generatedByGemma: input.generatedByGemma ?? false,
+            generatedByJobId: input.generatedByJobId ?? null,
             updatedAt: now,
           },
           $inc: { revision: 1 },
@@ -75,6 +90,9 @@ export class MongoEventStoryRepository {
         title: input.title,
         narrative: input.narrative,
         momentIds: input.momentIds,
+        evidenceReferences: input.evidenceReferences ?? [],
+        generatedByGemma: input.generatedByGemma ?? false,
+        generatedByJobId: input.generatedByJobId ?? null,
         updatedBy: input.updatedBy,
         revision: 1,
         createdAt: now,

@@ -8,6 +8,7 @@ import { hasApprovedTextSource } from "@/lib/domain/memory";
 import { formatCaptureTime } from "@/lib/domain/format-time";
 import { FragmentPrivacyControls } from "@/components/fragment-privacy-controls";
 import { FragmentComposer } from "@/components/fragment-composer";
+import { MemoryNavigation } from "@/components/memory-navigation";
 import { GroupInvitePanel } from "@/components/group-invite-panel";
 import { VoiceTranscriptReview } from "@/components/voice-transcript-review";
 import { AudioWaveform } from "@/components/audio-waveform";
@@ -780,11 +781,9 @@ export function GroupDetail({
     <main className="shell trust-page group-page" id="main-content">
       <a className="skip-link" href="#group-content">Skip to group timeline</a>
       <header className="topbar">
-        <Link className="wordmark" href="/home">between us<span>.</span></Link>
+        <Link className="wordmark" href="/">between us<span>.</span></Link>
+        <MemoryNavigation active="albums" />
         <nav className="top-actions" aria-label="Group navigation">
-          <Link href="/home">Home</Link>
-          <Link href="/friends">Friends</Link>
-          <Link href="/albums">Albums</Link>
           <Link href="#add-fragment">Add a memory <span aria-hidden="true">+</span></Link>
         </nav>
       </header>

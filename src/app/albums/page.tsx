@@ -19,12 +19,15 @@ export default async function AlbumsPage() {
   const groups = await listGroupsForUser(requestHeaders);
   const database = await getMongoDatabase();
   const albums = await Promise.all(groups.map(async (group) => {
-    const groupPosts = await new MongoMemoryRepository(database)
-      .findRecentGroupVisibleFragments(group.id, 101);
+    const memory = new MongoMemoryRepository(database);
+    const [groupPosts, cover] = await Promise.all([
+      memory.findRecentGroupVisibleFragments(group.id, 101),
+      memory.findGroupAlbumCover(group.id),
+    ]);
     return {
       group,
       count: groupPosts.length,
-      cover: groupPosts.find((fragment) => fragment.type === "image" || fragment.type === "video") ?? null,
+      cover,
       latestAt: groupPosts[0]?.capturedAt ?? null,
     };
   }));
@@ -32,7 +35,7 @@ export default async function AlbumsPage() {
   return (
     <main className="shell trust-page albums-page">
       <header className="topbar">
-        <Link className="wordmark" href="/home">between us<span>.</span></Link>
+        <Link className="wordmark" href="/">between us<span>.</span></Link>
         <MemoryNavigation active="albums" />
       </header>
       <section className="intro social-intro">
@@ -45,7 +48,7 @@ export default async function AlbumsPage() {
           {albums.map(({ group, count, cover, latestAt }) => (
             <Link className="album-card" href={`/groups/${group.id}`} key={group.id}>
               <div className="album-cover">
-                {cover?.type === "image" && (
+                {(cover?.type === "image" || cover?.type === "screenshot") && (
                   <Image
                     src={`/api/groups/${group.id}/fragments/${cover.id}/media`}
                     alt=""
@@ -57,7 +60,8 @@ export default async function AlbumsPage() {
                 {cover?.type === "video" && (
                   <video muted playsInline preload="metadata" src={`/api/groups/${group.id}/fragments/${cover.id}/media`} />
                 )}
-                {!cover && <span aria-hidden="true">✳</span>}
+                {!cover && <span className="album-cover-initial" aria-hidden="true">{group.name.slice(0, 1).toUpperCase()}</span>}
+                <span className="album-cover-title">{group.name}</span>
               </div>
               <div className="album-card-copy">
                 <h2>{group.name}</h2>
