@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { Fragment, MemberMoment, MemberStory, MomentCorrection } from "@/lib/domain/memory";
+import type { MemberFragmentAnalysis } from "@/lib/ai/fragment-analysis";
 import { hasApprovedTextSource } from "@/lib/domain/memory";
 import { formatCaptureTime } from "@/lib/domain/format-time";
 import { FragmentPrivacyControls } from "@/components/fragment-privacy-controls";
@@ -14,6 +15,8 @@ import Image from "next/image";
 export type GroupFragmentView = Omit<Fragment, "storageUri"> & {
   processingJobStatus: "queued" | "running" | "succeeded" | "failed" | "retrying" | null;
   mediaStorageAvailable?: boolean;
+  analysis?: MemberFragmentAnalysis;
+  processingError?: string;
 };
 
 const relationshipLabels: Record<MemberMoment["evidence"][number]["relationship"], string> = {
@@ -28,6 +31,25 @@ function contributorTone(authorUserId: string): string {
   let hash = 0;
   for (const character of authorUserId) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
   return `tone-${hash % 5 + 1}`;
+}
+
+function fragmentFailureMessage(errorCategory?: string): string {
+  if (errorCategory === "gemma_runtime_unavailable") {
+    return "Gemma could not be reached. Check that Ollama is running, the configured model is installed, and the Temporal worker can reach Ollama.";
+  }
+  if (errorCategory === "gemma_output_invalid") {
+    return "Gemma responded, but its output failed validation. Check the worker terminal for details.";
+  }
+  if (errorCategory === "fragment_source_unavailable") {
+    return "The fragment source is unavailable or no longer eligible for analysis.";
+  }
+  if (errorCategory === "temporal_unavailable") {
+    return "The processing service could not be reached. Check Temporal settings and make sure the worker is running.";
+  }
+  if (errorCategory === "fragment_ingestion_failed" || !errorCategory) {
+    return "Processing failed after retries. Check the Temporal worker terminal for details, then retry.";
+  }
+  return `Processing could not be retried: ${errorCategory}`;
 }
 
 function MomentReviewControls({
@@ -426,6 +448,8 @@ export function GroupDetail({
           const result = await response.json() as {
             status?: GroupFragmentView["processingJobStatus"];
             fragmentStatus?: GroupFragmentView["status"];
+            analysis?: MemberFragmentAnalysis;
+            errorCategory?: string;
           };
           if (!cancelled && "status" in result) {
             setFragments((current) => current.map((item) =>
@@ -434,6 +458,8 @@ export function GroupDetail({
                     ...item,
                     processingJobStatus: result.status ?? null,
                     ...(result.fragmentStatus ? { status: result.fragmentStatus } : {}),
+                    ...(result.analysis ? { analysis: result.analysis } : {}),
+                    ...(result.errorCategory ? { processingError: result.errorCategory } : {}),
                   }
                 : item,
             ));
@@ -585,14 +611,29 @@ export function GroupDetail({
 
   async function retryProcessing(fragment: GroupFragmentView) {
     const jobId = `ingest:${groupId}:${fragment.id}:${fragment.processingVersion}`;
-    const response = await fetch(
-      `/api/groups/${groupId}/processing-jobs/${encodeURIComponent(jobId)}`,
-      { method: "POST" },
-    );
-    if (response.status === 202) {
+    try {
+      const response = await fetch(
+        `/api/groups/${groupId}/processing-jobs/${encodeURIComponent(jobId)}`,
+        { method: "POST" },
+      );
+      const result = await response.json() as { error?: string };
+      if (response.status === 202) {
+        setFragments((current) => current.map((item) =>
+          item.id === fragment.id
+            ? { ...item, status: "uploaded", processingJobStatus: "queued", processingError: undefined }
+            : item,
+        ));
+      } else {
+        setFragments((current) => current.map((item) =>
+          item.id === fragment.id
+            ? { ...item, processingError: result.error ?? "Retry could not be queued." }
+            : item,
+        ));
+      }
+    } catch {
       setFragments((current) => current.map((item) =>
         item.id === fragment.id
-          ? { ...item, status: "uploaded", processingJobStatus: "queued" }
+          ? { ...item, processingError: "Could not reach the processing service. Check that the app and Temporal worker are running." }
           : item,
       ));
     }
@@ -889,6 +930,36 @@ export function GroupDetail({
                               ? "Private Gemma analysis is ready for reconstruction."
                               : "Private Gemma processing is waiting to start."}
                     </p>
+                  )}
+                  {fragment.aiProcessingConsent && fragment.processingJobStatus === "failed" && (
+                    <p className="fragment-processing-status" role="status">
+                      {fragmentFailureMessage(fragment.processingError)}
+                    </p>
+                  )}
+                  {fragment.analysis && fragment.aiProcessingConsent && (
+                    <section className="fragment-analysis" aria-label="Gemma observations">
+                      <h3>Gemma&apos;s tentative observations</h3>
+                      <p>{fragment.analysis.summary || "No summary was returned."}</p>
+                      {fragment.analysis.observedFacts.length ? (
+                            <ul>
+                              {fragment.analysis.observedFacts.map((fact, index) => (
+                                <li key={`${fact.type}-${fact.value}-${index}`}>
+                                  <strong>{fact.type.replace("_", " ")}:</strong> {fact.value}
+                                  <span> — evidence: “{fact.evidence.evidence}”</span>
+                                </li>
+                              ))}
+                            </ul>
+                      ) : (
+                            <p>No directly supported observations were found in this fragment.</p>
+                      )}
+                      <p>
+                            Tentative; not verified facts. Confidence: {Math.round(fragment.analysis.confidence * 100)}%.
+                            {" "}{fragment.analysis.uncertainty.reason}
+                      </p>
+                    </section>
+                  )}
+                  {fragment.processingError && fragment.processingJobStatus !== "failed" && (
+                    <p className="fragment-processing-status" role="status">{fragment.processingError}</p>
                   )}
                   {fragment.processingJobStatus === "failed" &&
                     (fragment.source !== "upload" ||

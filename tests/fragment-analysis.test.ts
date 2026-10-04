@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   FRAGMENT_ANALYSIS_VERSION,
+  fragmentAnalysisForMember,
   fragmentAnalysisResponseSchema,
   FragmentAnalysisValidationError,
   validateFragmentAnalysisOutput,
@@ -54,6 +55,29 @@ test("fragment analysis validates source quotes and preserves provenance fields"
   assert.equal(analysis.uncertainty.status, "possible");
   assert.equal(analysis.observedFacts[0].evidence.evidence, "at the cafeteria");
   assert.deepEqual(analysis.evidenceFragmentIds, [fragmentId]);
+});
+
+test("member fragment analysis projection exposes observations but omits private internals", () => {
+  const analysis = validateFragmentAnalysisOutput(validOutput, fragmentId, sourceText);
+  const memberView = fragmentAnalysisForMember({
+    ...analysis,
+    id: "private-id",
+    groupId: "private-group",
+    authorUserId: "private-author",
+    modelVersion: "gemma4:e2b",
+    sourceContentSha256: "private-digest",
+    analyzedAt: new Date("2026-10-04T12:00:00Z"),
+  });
+
+  assert.equal(memberView.summary, validOutput.summary);
+  assert.equal(memberView.observedFacts[0].value, "cafeteria");
+  assert.deepEqual(Object.keys(memberView).sort(), [
+    "analyzedAt",
+    "confidence",
+    "observedFacts",
+    "summary",
+    "uncertainty",
+  ]);
 });
 
 test("fragment analysis rejects invented IDs, unsupported source quotes, and certainty inflation", () => {

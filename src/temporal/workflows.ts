@@ -58,6 +58,42 @@ const storyActivity = proxyActivities<typeof activities>({
   },
 });
 
+function fragmentFailureCategory(error: unknown): string {
+  const pending: unknown[] = [error];
+  const visited = new Set<object>();
+  for (let depth = 0; pending.length && depth < 12; depth += 1) {
+    const current = pending.shift();
+    if (!current || typeof current !== "object" || visited.has(current)) continue;
+    visited.add(current);
+    const record = current as Record<string, unknown>;
+    const name = typeof record.name === "string" ? record.name : "";
+    const type = typeof record.type === "string" ? record.type : "";
+    const message = typeof record.message === "string" ? record.message : "";
+    const descriptor = `${name} ${type} ${message}`.toLowerCase();
+    if (descriptor.includes("could not reach the configured gemma runtime") ||
+        (descriptor.includes("gemmaprovidererror") && descriptor.includes("ollama returned http"))) {
+      return "gemma_runtime_unavailable";
+    }
+    if (descriptor.includes("fragmentanalysisvalidationerror") ||
+        descriptor.includes("ollama response has no message content") ||
+        descriptor.includes("ollama message content is not valid json")) {
+      return "gemma_output_invalid";
+    }
+    if (
+      descriptor.includes("fragmentunavailable") ||
+      descriptor.includes("unsupportedfragmenttype") ||
+      descriptor.includes("fragmentconsentrevoked") ||
+      descriptor.includes("mediasourceunavailable") ||
+      descriptor.includes("mediasourcechanged") ||
+      descriptor.includes("fragmentelegibilitychanged")
+    ) {
+      return "fragment_source_unavailable";
+    }
+    if ("cause" in record) pending.push(record.cause);
+  }
+  return "fragment_ingestion_failed";
+}
+
 export async function transcribeVoiceWorkflow(input: FragmentWorkflowInput): Promise<void> {
   const workflowId = workflowInfo().workflowId;
   try {
@@ -116,7 +152,7 @@ export async function processFragmentWorkflow(input: FragmentWorkflowInput): Pro
   } catch (error) {
     await runActivity.markProcessingJobFailed({
       jobId: input.jobId,
-      errorCategory: "fragment_ingestion_failed",
+      errorCategory: fragmentFailureCategory(error),
       groupId: input.groupId,
       fragmentId: input.fragmentId,
       fragmentStatus: "rejected",

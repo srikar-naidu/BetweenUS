@@ -6,6 +6,9 @@ import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-r
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { getTemporalClient, startFragmentWorkflow, TemporalConfigurationError } from "@/lib/processing/temporal-client";
 import { hasAnalyzableFragmentSource } from "@/lib/domain/memory";
+import { FRAGMENT_ANALYSIS_VERSION, fragmentAnalysisForMember, fragmentSourceDigest } from "@/lib/ai/fragment-analysis";
+import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-fragment-analysis-repository";
+import { safeProcessingFailureCategory } from "@/lib/processing/failure-category";
 
 export const runtime = "nodejs";
 
@@ -39,6 +42,22 @@ export async function GET(
         { headers: { "Cache-Control": "no-store" } },
       );
     }
+    if (job.jobType === "ingest" && job.status === "succeeded") {
+      const analysis = await new MongoFragmentAnalysisRepository(database).find(
+        groupId,
+        fragment.id,
+        FRAGMENT_ANALYSIS_VERSION,
+      );
+      return Response.json({
+        status: job.status,
+        fragmentStatus: fragment.status,
+        attemptCount: job.attemptCount,
+        updatedAt: job.updatedAt,
+        ...(analysis && analysis.sourceContentSha256 === fragmentSourceDigest(fragment)
+          ? { analysis: fragmentAnalysisForMember(analysis) }
+          : {}),
+      }, { headers: { "Cache-Control": "no-store" } });
+    }
     if (job.jobType === "reconstruct_moment" && job.status === "succeeded" && job.outputRef) {
       const moment = await new MongoMemoryRepository(database).findMoment(groupId, job.outputRef);
       if (!moment) return Response.json({ error: "Reconstruction result is unavailable" }, { status: 409 });
@@ -65,6 +84,9 @@ export async function GET(
       fragmentStatus: fragment.status,
       attemptCount: job.attemptCount,
       updatedAt: job.updatedAt,
+      ...(job.status === "failed" && job.errorMessage
+        ? { errorCategory: safeProcessingFailureCategory(job.errorMessage) }
+        : {}),
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     return apiErrorResponse(error);

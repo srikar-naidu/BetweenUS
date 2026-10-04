@@ -623,6 +623,11 @@ button, a, input, select, textarea, summary { -webkit-tap-highlight-color: trans
 .group-fragment > .contributor-label { margin-bottom: 3px; }
 .group-fragment audio { max-width: 100%; margin: 12px 0; accent-color: var(--green); }
 .fragment-processing-status { color: var(--blue); font-family: var(--mono); font-size: 10px; }
+.fragment-analysis { margin: 10px 0; padding: 12px; border-left: 2px solid var(--green); background: #f2f1e8; }
+.fragment-analysis h3 { margin: 0 0 6px; font-size: 12px; }
+.fragment-analysis p { margin: 6px 0; font-size: 11px; line-height: 1.5; }
+.fragment-analysis ul { margin: 7px 0; padding-left: 18px; font-size: 11px; line-height: 1.55; }
+.fragment-analysis li { margin: 4px 0; }
 .fragment-privacy-controls { align-items: end; gap: 10px 15px; margin-top: 15px; padding-top: 12px; border-top: 1px dashed var(--rule); }
 .fragment-privacy-controls label { min-width: 120px; }
 .fragment-privacy-controls .consent-control { display: flex; align-items: center; gap: 8px; font-weight: 500; }

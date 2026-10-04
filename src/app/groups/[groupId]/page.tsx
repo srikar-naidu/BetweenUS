@@ -14,7 +14,10 @@ import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { MongoStoryRepository } from "@/lib/repositories/mongodb-story-repository";
+import { FRAGMENT_ANALYSIS_VERSION, fragmentAnalysisForMember, fragmentSourceDigest } from "@/lib/ai/fragment-analysis";
+import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-fragment-analysis-repository";
 import { isManagedGroupMediaStorageUri } from "@/lib/repositories/mongodb-group-media-storage";
+import { safeProcessingFailureCategory } from "@/lib/processing/failure-category";
 
 export const dynamic = "force-dynamic";
 
@@ -58,7 +61,17 @@ export default async function GroupPage({
     storyRepository.listStories(groupId),
     storyRepository.listPendingStoryJobs(groupId, session.user.id),
   ]);
-  const processingStatuses = await ingestionRepository.latestProcessingStatusByFragmentIds(
+  const analysisRecords = await new MongoFragmentAnalysisRepository(database).findMany(
+    groupId,
+    memberFragments
+      .filter((fragment) => fragment.aiProcessingConsent)
+      .map((fragment) => fragment.id),
+    FRAGMENT_ANALYSIS_VERSION,
+  );
+  const analysesByFragment = new Map(
+    analysisRecords.map((analysis) => [analysis.fragmentId, analysis]),
+  );
+  const processingJobs = await ingestionRepository.latestProcessingJobsByFragmentIds(
     groupId,
     memberFragments.map((fragment) => fragment.id),
   );
@@ -70,14 +83,26 @@ export default async function GroupPage({
   const storyFragments = await repository.findEligibleGroupVisibleFragmentsByIds(groupId, storyFragmentIds);
   const stories = visibleStoriesForMember(groupStories, groupMoments, storyFragments)
     .map(storyForGroupMember);
-  const fragments: GroupFragmentView[] = memberFragments.map(({ storageUri, ...fragment }) => ({
-    ...fragment,
-    processingJobStatus: fragment.aiProcessingConsent ? processingStatuses.get(fragment.id) ?? null : null,
-    mediaStorageAvailable:
-      (fragment.type === "image" || fragment.type === "video") &&
-      typeof storageUri === "string" &&
-      isManagedGroupMediaStorageUri(storageUri),
-  }));
+  const fragments: GroupFragmentView[] = memberFragments.map((fragment) => {
+    const { storageUri, ...visibleFragment } = fragment;
+    const analysis = analysesByFragment.get(fragment.id);
+    return {
+      ...visibleFragment,
+      processingJobStatus: fragment.aiProcessingConsent ? processingJobs.get(fragment.id)?.status ?? null : null,
+      ...(fragment.aiProcessingConsent && processingJobs.get(fragment.id)?.status === "failed"
+        ? { processingError: safeProcessingFailureCategory(processingJobs.get(fragment.id)?.errorMessage) }
+        : {}),
+      mediaStorageAvailable:
+        (fragment.type === "image" || fragment.type === "video") &&
+        typeof storageUri === "string" &&
+        isManagedGroupMediaStorageUri(storageUri),
+      ...(fragment.aiProcessingConsent &&
+        analysis &&
+        analysis.sourceContentSha256 === fragmentSourceDigest(fragment)
+        ? { analysis: fragmentAnalysisForMember(analysis) }
+        : {}),
+    };
+  });
 
   return (
     <GroupDetail

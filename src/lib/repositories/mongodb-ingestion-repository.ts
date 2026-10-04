@@ -161,6 +161,14 @@ export class MongoIngestionRepository {
     groupId: string,
     fragmentIds: readonly string[],
   ): Promise<Map<string, ProcessingJobStatus>> {
+    const jobs = await this.latestProcessingJobsByFragmentIds(groupId, fragmentIds);
+    return new Map([...jobs].map(([fragmentId, job]) => [fragmentId, job.status]));
+  }
+
+  async latestProcessingJobsByFragmentIds(
+    groupId: string,
+    fragmentIds: readonly string[],
+  ): Promise<Map<string, ProcessingJob>> {
     await this.ensureIndexes();
     if (!fragmentIds.length) return new Map();
     const records = await this.processingJobs.find({
@@ -168,11 +176,11 @@ export class MongoIngestionRepository {
       fragmentId: { $in: [...fragmentIds] },
       jobType: "ingest",
     }).sort({ updatedAt: -1 }).toArray();
-    const statuses = new Map<string, ProcessingJobStatus>();
+    const jobs = new Map<string, ProcessingJob>();
     for (const record of records) {
-      if (!statuses.has(record.fragmentId)) statuses.set(record.fragmentId, record.status);
+      if (!jobs.has(record.fragmentId)) jobs.set(record.fragmentId, asRecord(record));
     }
-    return statuses;
+    return jobs;
   }
 
   async findFragmentForCleanup(groupId: string, fragmentId: string): Promise<Pick<Fragment, "id" | "groupId" | "source" | "type" | "storageUri" | "deletionState"> | null> {

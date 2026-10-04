@@ -62,6 +62,24 @@ export interface FragmentAnalysis {
   analyzedAt: Date;
 }
 
+export type MemberFragmentAnalysis = Pick<
+  FragmentAnalysis,
+  "summary" | "observedFacts" | "confidence" | "uncertainty" | "analyzedAt"
+>;
+
+export function fragmentAnalysisForMember(analysis: FragmentAnalysis): MemberFragmentAnalysis {
+  return {
+    summary: analysis.summary,
+    observedFacts: analysis.observedFacts.map((fact) => ({
+      ...fact,
+      evidence: { ...fact.evidence },
+    })),
+    confidence: analysis.confidence,
+    uncertainty: { ...analysis.uncertainty },
+    analyzedAt: analysis.analyzedAt,
+  };
+}
+
 export interface FragmentAnalysisGenerator {
   readonly modelVersion: string;
   generateStructured(input: StructuredGenerationInput): Promise<Record<string, unknown>>;
