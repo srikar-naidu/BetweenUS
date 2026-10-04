@@ -2,7 +2,6 @@ import { apiErrorResponse } from "@/lib/api/errors";
 import { requireGroupMembership } from "@/lib/auth/group-access";
 import { FRAGMENT_ANALYSIS_VERSION } from "@/lib/ai/fragment-analysis";
 import { getMongoDatabase } from "@/lib/db/mongodb";
-import { getTemporalClient, startFragmentWorkflow, TemporalConfigurationError } from "@/lib/processing/temporal-client";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-fragment-analysis-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
@@ -82,8 +81,6 @@ export async function PATCH(
     const processingVersion = shouldQueueAnalysis
       ? `${FRAGMENT_ANALYSIS_VERSION}-${Date.now()}`
       : undefined;
-    if (shouldQueueAnalysis) await getTemporalClient();
-
     const fragment = await repository.updateFragmentPrivacy({
       groupId,
       fragmentId,
@@ -102,7 +99,7 @@ export async function PATCH(
 
     let processingStatus = fragment.aiProcessingConsent ? previousJob?.status ?? null : null;
     let jobId = fragment.aiProcessingConsent ? previousJob?.id ?? null : null;
-    let workflowId = fragment.aiProcessingConsent ? previousJob?.temporalWorkflowId ?? null : null;
+    let workflowId = fragment.aiProcessingConsent ? previousJob?.id ?? null : null;
     if (shouldQueueAnalysis && processingVersion) {
       const job = await ingestion.upsertProcessingJob({
         groupId,
@@ -111,14 +108,8 @@ export async function PATCH(
         processingVersion,
       });
       jobId = job.id;
-      try {
-        workflowId = await startFragmentWorkflow(job, "processFragmentWorkflow");
-        processingStatus = "queued";
-      } catch {
-        await ingestion.markProcessingJobFailed({ id: job.id, errorMessage: "temporal_unavailable" });
-        workflowId = null;
-        processingStatus = "failed";
-      }
+      workflowId = job.id;
+      processingStatus = job.status;
     }
     const { storageUri, ...visibleFragment } = fragment;
     void storageUri;
@@ -127,9 +118,6 @@ export async function PATCH(
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    if (error instanceof TemporalConfigurationError) {
-      return Response.json({ error: "Processing is not configured on this server" }, { status: 503 });
-    }
     return apiErrorResponse(error);
   }
 }

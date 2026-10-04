@@ -14,7 +14,6 @@ import {
 } from "@/lib/ingestion/voice-validation";
 import { getElevenLabsTranscriptionSettings } from "@/lib/integrations/elevenlabs-client";
 import { getMongoDatabase } from "@/lib/db/mongodb";
-import { getTemporalClient, startFragmentWorkflow, TemporalConfigurationError } from "@/lib/processing/temporal-client";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { MongoVoiceRepository } from "@/lib/repositories/mongodb-voice-repository";
@@ -134,17 +133,8 @@ export async function POST(
 
     const settings = getElevenLabsTranscriptionSettings();
     let transcriptionReady = transcriptionConsent && settings !== null;
-    let manualReason: "not_consented" | "provider_disabled" | "temporal_unavailable" | "monthly_limit" | null =
+    let manualReason: "not_consented" | "provider_disabled" | "monthly_limit" | null =
       transcriptionConsent ? settings ? null : "provider_disabled" : "not_consented";
-    if (transcriptionReady) {
-      try {
-        await getTemporalClient();
-      } catch (error) {
-        if (!(error instanceof TemporalConfigurationError)) throw error;
-        transcriptionReady = false;
-        manualReason = "temporal_unavailable";
-      }
-    }
 
     const voices = new MongoVoiceRepository(database);
     let reservedByThisRequest = false;
@@ -225,24 +215,13 @@ export async function POST(
           jobType: "transcribe_voice",
           processingVersion: "voice-transcription-v1",
         });
-        try {
-          await startFragmentWorkflow(job, "transcribeVoiceWorkflow");
-          processingStatus = "queued";
-        } catch {
-          await jobs.markProcessingJobFailed({ id: job.id, errorMessage: "temporal_unavailable" });
-          await voices.markTranscriptFailed(groupId, fragmentId);
-          processingStatus = "failed";
-        }
+        processingStatus = job.status;
       }
       const { storageUri: _storageUri, ...visibleFragment } = fragment;
       return Response.json({
         fragment: visibleFragment,
-        transcriptionStatus: transcriptionReady && processingStatus !== "failed"
-          ? "transcribing"
-          : transcriptionReady
-            ? "failed"
-            : "manual_review",
-        manualReason: processingStatus === "failed" ? "temporal_unavailable" : manualReason,
+        transcriptionStatus: transcriptionReady ? "transcribing" : "manual_review",
+        manualReason,
         processingStatus,
       }, {
         status: 201,

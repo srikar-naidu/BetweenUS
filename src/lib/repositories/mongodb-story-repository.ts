@@ -217,7 +217,7 @@ export class MongoStoryRepository {
   async markStoryJobStarted(input: { groupId: string; jobId: string; workflowId: string }): Promise<void> {
     await this.ensureIndexes();
     await this.jobs.updateOne(
-      { _id: input.jobId, groupId: input.groupId, status: "queued" },
+      { _id: input.jobId, groupId: input.groupId, status: { $in: ["queued", "running"] } },
       { $set: { status: "running", workflowId: input.workflowId, updatedAt: new Date() } },
     );
   }

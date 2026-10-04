@@ -3,7 +3,6 @@ import { requireGroupMembership } from "@/lib/auth/group-access";
 import { FRAGMENT_ANALYSIS_VERSION } from "@/lib/ai/fragment-analysis";
 import { getMongoDatabase } from "@/lib/db/mongodb";
 import { isFragmentVisibility, MAX_VOICE_TRANSCRIPT_CHARACTERS } from "@/lib/ingestion/voice-validation";
-import { getTemporalClient, startFragmentWorkflow, TemporalConfigurationError } from "@/lib/processing/temporal-client";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { MongoVoiceRepository } from "@/lib/repositories/mongodb-voice-repository";
@@ -92,8 +91,6 @@ export async function PATCH(
     ) {
       return Response.json({ error: "Voice transcript is not ready for review" }, { status: 409 });
     }
-    if (aiProcessingConsent) await getTemporalClient();
-
     const reviewedAt = new Date();
     const sessionTransaction = database.client.startSession();
     const reviewState: { fragment: Fragment | null } = { fragment: null };
@@ -134,13 +131,8 @@ export async function PATCH(
         processingVersion: reviewedFragment.processingVersion,
       });
       jobId = job.id;
-      try {
-        workflowId = await startFragmentWorkflow(job, "processFragmentWorkflow");
-        processingStatus = "queued";
-      } catch {
-        await jobs.markProcessingJobFailed({ id: job.id, errorMessage: "temporal_unavailable" });
-        processingStatus = "failed";
-      }
+      workflowId = job.id;
+      processingStatus = job.status;
     }
     const { storageUri: _storageUri, ...visibleFragment } = reviewedFragment;
     return Response.json({
@@ -150,9 +142,6 @@ export async function PATCH(
       processingStatus,
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    if (error instanceof TemporalConfigurationError) {
-      return Response.json({ error: "Processing is not configured on this server" }, { status: 503 });
-    }
     return apiErrorResponse(error);
   }
 }

@@ -12,7 +12,6 @@ import {
 } from "@/lib/ingestion/media-validation";
 import { validateVoiceCaptureMetadata } from "@/lib/ingestion/voice-validation";
 import { getMongoDatabase } from "@/lib/db/mongodb";
-import { getTemporalClient, startFragmentWorkflow, TemporalConfigurationError } from "@/lib/processing/temporal-client";
 import {
   MongoIngestionRepository,
   type ProcessingJobStatus,
@@ -36,15 +35,7 @@ async function queueMediaAnalysis(
     processingVersion: fragment.processingVersion,
   });
   if (job.status !== "queued") return job.status;
-  try {
-    await getTemporalClient();
-    await startFragmentWorkflow(job, "processFragmentWorkflow");
-    return "queued";
-  } catch (error) {
-    if (!(error instanceof TemporalConfigurationError)) throw error;
-    await jobs.markProcessingJobFailed({ id: job.id, errorMessage: "temporal_unavailable" });
-    return "failed";
-  }
+  return job.status;
 }
 
 async function readMediaBytes(request: Request, maximumBytes: number): Promise<Uint8Array> {

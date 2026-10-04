@@ -1938,11 +1938,20 @@ body {
 .nav-profile { display: grid; flex: 0 0 36px; width: 36px; height: 36px; overflow: hidden; place-items: center; border: 2px solid #fffdf8; border-radius: 50%; background: #dce6df; box-shadow: 0 0 0 1px var(--rule); color: var(--green); font-size: 13px; font-weight: 700; text-decoration: none; }
 .nav-profile img { width: 100%; height: 100%; object-fit: cover; }
 .nav-sign-in { min-height: 34px; display: inline-flex; align-items: center; padding: 0 13px; border: 1px solid var(--green); color: var(--green) !important; }
-.memory-site-header { position: relative; max-width: 1256px; margin: 0 auto; padding: 0 38px; }
+.memory-site-header { position: relative; width: min(100% - 40px, 1256px); max-width: 1256px; margin: 0 auto; padding: 10px 0; }
+.memory-site-header .memory-navigation { gap: clamp(14px, 2.2vw, 30px); }
+.memory-site-header .memory-navigation-links { gap: clamp(12px, 1.8vw, 25px); }
+.memory-site-header .memory-navigation-links a { position: relative; color: var(--paper-bright); font-family: var(--mono); font-size: 11px; font-weight: 500; }
+.memory-site-header .memory-navigation-links a:hover { color: var(--lime); }
+.memory-site-header .memory-navigation-links a[aria-current="page"] { color: var(--paper-bright); }
+.memory-site-header .memory-navigation-links a[aria-current="page"]::after { position: absolute; right: 0; bottom: -8px; left: 0; height: 2px; background: var(--coral); content: ""; }
 .memory-navigation-account { display: flex; align-items: center; gap: 12px; }
-.nav-sign-out { min-height: 34px; padding: 0 11px; border: 1px solid var(--green); background: transparent; color: var(--green); cursor: pointer; font-size: 11px; }
+.nav-sign-out { min-height: 34px; padding: 0 11px; border: 1px solid #f7f7f280; background: transparent; color: var(--paper-bright); cursor: pointer; font-family: var(--mono); font-size: 10px; }
 .nav-sign-out:disabled { cursor: wait; opacity: .65; }
 .nav-auth-error { position: absolute; top: 58px; right: 38px; z-index: 5; padding: 7px 10px; background: #fffdf8; color: #8a3024; font-size: 11px; }
+.memory-site-header .nav-profile { border-color: var(--paper-bright); background: var(--coral); color: var(--ink); }
+.memory-site-header .nav-sign-in { min-height: 36px; border: 1px solid var(--paper-bright); color: var(--paper-bright) !important; font-family: var(--mono); font-size: 10px; }
+.memory-site-header .nav-sign-in:hover, .nav-sign-out:hover { background: var(--coral); border-color: var(--coral); color: var(--ink) !important; }
 .album-entry { display: grid; align-content: start; gap: 9px; }
 .album-cover-control { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .album-cover-control input[type="file"] { display: none; }
@@ -2000,10 +2009,10 @@ body {
 .social-page .memory-navigation a[aria-current="page"] { color: #fff; }
 .social-page .nav-sign-in { border-color: #f5f2e9; color: #fff !important; }
 @media (max-width: 700px) {
-  .memory-site-header { padding-inline: 20px; }
-  .memory-navigation { gap: 9px; }
-  .memory-navigation-links { gap: 10px; }
-  .memory-navigation a { font-size: 9px; }
+  .memory-site-header { width: calc(100% - 32px); }
+  .memory-site-header .memory-navigation { gap: 9px; }
+  .memory-site-header .memory-navigation-links { gap: 10px; }
+  .memory-site-header .memory-navigation-links a { font-size: 9px; }
   .nav-profile { flex-basis: 30px; width: 30px; height: 30px; }
   .memory-navigation-account { gap: 7px; }
   .nav-sign-out { min-height: 30px; padding-inline: 7px; font-size: 9px; }
@@ -2013,12 +2022,12 @@ body {
   .friend-discovery-setting { padding: 15px; }
 }
 @media (max-width: 460px) {
-  .memory-site-header { min-height: 64px; padding-inline: 12px; }
+  .memory-site-header { width: calc(100% - 20px); min-height: 64px; }
   .memory-site-header > .wordmark { font-size: 18px; }
-  .memory-navigation { gap: 6px; }
-  .memory-navigation-links { gap: 7px; }
-  .memory-navigation a { font-size: 8px; }
-  .memory-navigation-links a:last-child { display: none; }
-  .nav-sign-in { min-height: 29px; padding-inline: 7px; font-size: 9px !important; }
-  .nav-sign-out { padding-inline: 5px; font-size: 8px; }
+  .memory-site-header .memory-navigation { gap: 6px; }
+  .memory-site-header .memory-navigation-links { gap: 7px; }
+  .memory-site-header .memory-navigation-links a { font-size: 8px; }
+  .memory-site-header .memory-navigation-links a:last-child { display: none; }
+  .memory-site-header .nav-sign-in { min-height: 29px; padding-inline: 7px; font-size: 9px !important; }
+  .memory-site-header .nav-sign-out { padding-inline: 5px; font-size: 8px; }
 }

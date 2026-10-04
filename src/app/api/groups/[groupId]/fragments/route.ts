@@ -4,7 +4,6 @@ import { requireGroupMembership } from "@/lib/auth/group-access";
 import { FRAGMENT_ANALYSIS_VERSION } from "@/lib/ai/fragment-analysis";
 import { FragmentInputError, validateTextFragment } from "@/lib/ingestion/fragment-validation";
 import { getMongoDatabase } from "@/lib/db/mongodb";
-import { startFragmentWorkflow } from "@/lib/processing/temporal-client";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 
@@ -89,7 +88,7 @@ export async function POST(
           processingJobStatus: existingFragment.aiProcessingConsent ? existingJob?.status ?? null : null,
         },
         jobId: existingFragment.aiProcessingConsent ? existingJob?.id ?? null : null,
-        workflowId: existingFragment.aiProcessingConsent ? existingJob?.temporalWorkflowId ?? null : null,
+        workflowId: existingFragment.aiProcessingConsent ? existingJob?.id ?? null : null,
         processingStatus: existingFragment.aiProcessingConsent ? existingJob?.status ?? null : null,
       }, { headers: { "Cache-Control": "no-store" } });
     }
@@ -129,19 +128,14 @@ export async function POST(
       jobType: "ingest",
       processingVersion: fragment.processingVersion,
     });
-    let workflowId: string | null = null;
-    try {
-      workflowId = await startFragmentWorkflow(job, "processFragmentWorkflow");
-    } catch {
-      await ingestionRepository.markProcessingJobFailed({ id: job.id, errorMessage: "temporal_unavailable" });
-    }
+    const workflowId = job.id;
     const { storageUri: _storageUri, ...visibleFragment } = fragment;
     return Response.json(
       {
-        fragment: { ...visibleFragment, processingJobStatus: workflowId ? "queued" : "failed" },
+        fragment: { ...visibleFragment, processingJobStatus: job.status },
         jobId: job.id,
         workflowId,
-        processingStatus: workflowId ? "queued" : "failed",
+        processingStatus: job.status,
       },
       { status: 202, headers: { "Cache-Control": "no-store" } },
     );

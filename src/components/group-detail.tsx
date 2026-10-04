@@ -36,7 +36,7 @@ function contributorTone(authorUserId: string): string {
 
 function fragmentFailureMessage(errorCategory?: string): string {
   if (errorCategory === "gemma_runtime_unavailable") {
-    return "Gemma could not be reached. Check that Ollama is running, the configured model is installed, and the Temporal worker can reach Ollama.";
+    return "Gemma could not be reached. Check that Ollama is running, the configured model is installed, and the background worker can reach Ollama.";
   }
   if (errorCategory === "gemma_output_invalid") {
     return "Gemma responded, but its output failed validation. Check the worker terminal for details.";
@@ -45,10 +45,10 @@ function fragmentFailureMessage(errorCategory?: string): string {
     return "The fragment source is unavailable or no longer eligible for analysis.";
   }
   if (errorCategory === "temporal_unavailable") {
-    return "The processing service could not be reached. Check Temporal settings and make sure the worker is running.";
+    return "The processing worker could not be reached. Check that the MongoDB queue worker is running.";
   }
   if (errorCategory === "fragment_ingestion_failed" || !errorCategory) {
-    return "Processing failed after retries. Check the Temporal worker terminal for details, then retry.";
+    return "Processing failed. Check the background worker logs, then retry.";
   }
   return `Processing could not be retried: ${errorCategory}`;
 }
@@ -634,7 +634,7 @@ export function GroupDetail({
     } catch {
       setFragments((current) => current.map((item) =>
         item.id === fragment.id
-          ? { ...item, processingError: "Could not reach the processing service. Check that the app and Temporal worker are running." }
+          ? { ...item, processingError: "Could not reach the processing service. Check that the app and MongoDB queue worker are running." }
           : item,
       ));
     }

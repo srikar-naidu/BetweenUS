@@ -2,7 +2,6 @@ import { apiErrorResponse } from "@/lib/api/errors";
 import { requireGroupMembership } from "@/lib/auth/group-access";
 import { storyForGroupMember, visibleStoriesForMember } from "@/lib/auth/group-visibility";
 import { getMongoDatabase } from "@/lib/db/mongodb";
-import { TemporalConfigurationError, getTemporalClient, startStoryReconstructionWorkflow } from "@/lib/processing/temporal-client";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { MongoStoryRepository } from "@/lib/repositories/mongodb-story-repository";
 
@@ -57,7 +56,6 @@ export async function POST(
         { status: 409 },
       );
     }
-    await getTemporalClient();
     const repository = new MongoStoryRepository(database);
     const job = await repository.createStoryJob({
       groupId,
@@ -67,26 +65,11 @@ export async function POST(
     if (job.requesterUserId !== session.user.id) {
       return Response.json({ error: "Story reconstruction request not found" }, { status: 404 });
     }
-    if (job.status === "queued") {
-      try {
-        await startStoryReconstructionWorkflow(job);
-      } catch {
-        await repository.markStoryJobFailed({
-          groupId,
-          jobId: job.id,
-          errorCategory: "temporal_unavailable",
-        });
-        return Response.json({ error: "Story reconstruction could not be queued" }, { status: 503 });
-      }
-    }
     return Response.json(
       { jobId: job.id, status: job.status },
       { status: 202, headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    if (error instanceof TemporalConfigurationError) {
-      return Response.json({ error: "Processing is not configured on this server" }, { status: 503 });
-    }
     return apiErrorResponse(error);
   }
 }

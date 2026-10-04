@@ -5,7 +5,6 @@ import { momentForGroupMember, visibleMomentsForMember } from "@/lib/auth/group-
 import { FRAGMENT_ANALYSIS_VERSION } from "@/lib/ai/fragment-analysis";
 import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MOMENT_RECONSTRUCTION_VERSION } from "@/lib/pipeline/moment-reconstruction";
-import { TemporalConfigurationError, getTemporalClient, startMomentReconstructionWorkflow } from "@/lib/processing/temporal-client";
 import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-fragment-analysis-repository";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
@@ -62,7 +61,6 @@ export async function POST(
     if (!analysis) {
       return Response.json({ error: "Anchor fragment analysis is not ready" }, { status: 409 });
     }
-    await getTemporalClient();
     const processingVersion = `${MOMENT_RECONSTRUCTION_VERSION}-${createHash("sha256")
       .update(`${session.user.id}\0${requestId}`)
       .digest("hex")}`;
@@ -72,29 +70,21 @@ export async function POST(
       fragmentId: anchor.id,
       jobType: "reconstruct_moment",
       processingVersion,
+      requesterUserId: session.user.id,
     });
     if (job.status !== "queued") {
       return Response.json({
         jobId: job.id,
-        workflowId: job.temporalWorkflowId,
+        workflowId: job.id,
         status: job.status,
       }, { status: 202, headers: { "Cache-Control": "no-store" } });
     }
-    let workflowId: string;
-    try {
-      workflowId = await startMomentReconstructionWorkflow(job, session.user.id);
-    } catch {
-      await jobs.markProcessingJobFailed({ id: job.id, errorMessage: "temporal_unavailable" });
-      return Response.json({ error: "Moment reconstruction could not be queued" }, { status: 503 });
-    }
+    const workflowId = job.id;
     return Response.json(
       { jobId: job.id, workflowId, status: "queued" },
       { status: 202, headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {
-    if (error instanceof TemporalConfigurationError) {
-      return Response.json({ error: "Processing is not configured on this server" }, { status: 503 });
-    }
     return apiErrorResponse(error);
   }
 }

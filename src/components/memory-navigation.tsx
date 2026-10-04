@@ -38,17 +38,17 @@ export function MemoryNavigation() {
       </div>
       {session ? (
         <div className="memory-navigation-account">
+          <button className="nav-sign-out" type="button" onClick={() => void signOut()} disabled={isSigningOut}>
+            {isSigningOut ? "Signing out…" : "Sign out"}
+          </button>
           <Link className="nav-profile" href="/home" aria-label={`Signed in as ${session.user.name}`}>
             {session.user.image
               ? <Image src={session.user.image} alt="" width={36} height={36} unoptimized />
               : <span>{session.user.name.slice(0, 1).toUpperCase()}</span>}
           </Link>
-          <button className="nav-sign-out" type="button" onClick={() => void signOut()} disabled={isSigningOut}>
-            {isSigningOut ? "Signing out…" : "Sign out"}
-          </button>
         </div>
       ) : (
-        !isPending && <Link className="nav-sign-in" href="/sign-in">Sign in</Link>
+        (!isPending || pathname === "/sign-in") && <Link className="nav-sign-in" href="/sign-in">Sign in</Link>
       )}
       {signOutError && <span className="nav-auth-error" role="alert">{signOutError}</span>}
     </nav>

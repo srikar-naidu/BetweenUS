@@ -115,7 +115,7 @@ If the system is uncertain whether a fragment should be used in a shared inferen
 - Keep the feature off by default. Enable only with `ELEVENLABS_TRANSCRIPTION_ENABLED=true`, an API key, and approved non-zero `ELEVENLABS_MONTHLY_SECONDS` and `ELEVENLABS_MONTHLY_REQUESTS`; enforce the clip cap server-side. Reservations are stored per UTC month and are not refunded after provider outcomes become uncertain.
 - ElevenLabs documents zero-retention mode as enterprise-only; do not assume it is available on a free-credit account.
 - Do not use voice cloning, speaker diarization, or TTS in the MVP. Do not automatically retry a failed external transcription.
-- If consent, quota, provider configuration, or Temporal is missing, retain the group audio post for manual transcription without blocking other posts.
+- If consent, quota, or provider configuration is missing, retain the group audio post for manual transcription without blocking other posts.
 
 ### Tinker
 
@@ -123,11 +123,11 @@ If the system is uncertain whether a fragment should be used in a shared inferen
 - Use synthetic or explicitly de-identified/consented training examples only. Never upload private group media, raw Backboard memory, or personal identifiers.
 - Use a dedicated project, a hard spend cap, and documented cleanup for training runs/checkpoints. Confirm current model support and data terms before sending any sample.
 
-### Temporal
+### Background processing
 
-- Temporal workflow history can persist for retries and replay; pass only opaque IDs and minimal status metadata.
-- Activities fetch authorized media/context from canonical stores at execution time. Persist sensitive outputs to MongoDB/Tiger and return opaque IDs/status only. Never put binary media, extracted text, transcripts, full ContextPackets, model prompts/completions, or access tokens in workflow arguments/results.
-- Use idempotency keys and authorization checks in every activity. Workflow failure must not widen visibility or bypass deletion.
+- MongoDB job records and worker leases persist for retry/recovery; store only opaque IDs and minimal status metadata in queue records.
+- Workers fetch authorized media/context from canonical stores at execution time. Persist sensitive outputs to MongoDB/Tiger. Never place binary media, extracted text, transcripts, full ContextPackets, model prompts/completions, or access tokens in job records.
+- Use idempotency keys and authorization checks in every worker activity. Worker failure must not widen visibility or bypass deletion.
 
 ### Sentry
 

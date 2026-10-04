@@ -1,30 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { MongoIngestionRepository } from "../src/lib/repositories/mongodb-ingestion-repository";
-import { getTemporalSettings } from "../src/lib/processing/temporal-client";
-
-test("Temporal configuration supports local and Cloud endpoints without logging credentials", () => {
-  assert.equal(getTemporalSettings({}), null);
-  assert.deepEqual(getTemporalSettings({
-    TEMPORAL_ADDRESS: "localhost:7233",
-    TEMPORAL_NAMESPACE: "default",
-  }), {
-    address: "localhost:7233",
-    namespace: "default",
-    taskQueue: "between-us-processing",
-  });
-  assert.deepEqual(getTemporalSettings({
-    TEMPORAL_ADDRESS: "tenant.tmprl.cloud:7233",
-    TEMPORAL_NAMESPACE: "tenant.account",
-    TEMPORAL_TASK_QUEUE: "private-processing",
-    TEMPORAL_API_KEY: "not-printed",
-  }), {
-    address: "tenant.tmprl.cloud:7233",
-    namespace: "tenant.account",
-    taskQueue: "private-processing",
-    apiKey: "not-printed",
-  });
-});
 
 test("processing job upserts are stable and scoped to group, fragment, and version", async () => {
   const documents: Array<Record<string, unknown>> = [];
@@ -54,6 +30,7 @@ test("processing job upserts are stable and scoped to group, fragment, and versi
     fragmentId: "fragment-a",
     jobType: "ingest" as const,
     processingVersion: "ingest-v1",
+    requesterUserId: "user-a",
   };
 
   const first = await repository.upsertProcessingJob(input);
@@ -71,6 +48,7 @@ test("processing job upserts are stable and scoped to group, fragment, and versi
   assert.notEqual(first.id, nextVersion.id);
   assert.notEqual(reconstruction.id, first.id);
   assert.equal(reconstruction.jobType, "reconstruct_moment");
+  assert.equal(first.requesterUserId, "user-a");
   assert.equal(documents.length, 4);
 });
 

@@ -69,7 +69,7 @@ export class MongoEventStoryGenerationJobRepository {
   async markRunning(jobId: string, workflowId: string): Promise<void> {
     await this.ensureIndexes();
     await this.jobs.updateOne(
-      { _id: jobId, status: "queued" },
+      { _id: jobId, status: { $in: ["queued", "running"] } },
       { $set: { status: "running", workflowId, updatedAt: new Date() } },
     );
   }

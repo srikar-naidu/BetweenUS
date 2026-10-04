@@ -4,7 +4,7 @@ services:
     runtime: node
     region: oregon
     plan: starter
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm run start
     healthCheckPath: /api/health
     autoDeploy: false
@@ -41,23 +41,17 @@ services:
           type: pserv
           name: betweenus-gemma
           property: hostport
-      - key: TEMPORAL_ADDRESS
-        sync: false
-      - key: TEMPORAL_NAMESPACE
-        sync: false
-      - key: TEMPORAL_API_KEY
-        sync: false
       - key: SENTRY_DSN
         sync: false
       - key: NEXT_PUBLIC_SENTRY_DSN
         sync: false
 
   - type: worker
-    name: betweenus-temporal-worker
+    name: betweenus-background-worker
     runtime: node
     region: oregon
     plan: starter
-    buildCommand: npm ci
+    buildCommand: npm ci --include=dev
     startCommand: npm run worker
     autoDeploy: false
     envVars:
@@ -79,12 +73,6 @@ services:
           type: pserv
           name: betweenus-gemma
           property: hostport
-      - key: TEMPORAL_ADDRESS
-        sync: false
-      - key: TEMPORAL_NAMESPACE
-        sync: false
-      - key: TEMPORAL_API_KEY
-        sync: false
       - key: SENTRY_DSN
         sync: false
 
@@ -129,10 +117,6 @@ envVarGroups:
         value: gemma4:e2b
       - key: GEMMA_TIMEOUT_MS
         value: "300000"
-      - key: TEMPORAL_TLS
-        value: "true"
-      - key: TEMPORAL_TASK_QUEUE
-        value: between-us-processing
       - key: SENTRY_ENABLED
         value: "false"
       - key: NEXT_PUBLIC_SENTRY_ENABLED

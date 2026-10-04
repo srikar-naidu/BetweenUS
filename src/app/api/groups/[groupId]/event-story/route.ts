@@ -5,7 +5,6 @@ import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { MongoEventStoryRepository } from "@/lib/repositories/mongodb-event-story-repository";
 import { MongoEventStoryGenerationJobRepository } from "@/lib/repositories/mongodb-event-story-generation-job-repository";
-import { startEventStoryGenerationWorkflow } from "@/lib/processing/temporal-client";
 import { MAX_EVENT_STORY_MOMENTS } from "@/lib/pipeline/event-story-generation";
 
 export const runtime = "nodejs";
@@ -161,18 +160,10 @@ export async function POST(
       momentIds: input.momentIds as string[],
       expectedRevision,
     });
-    try {
-      const workflowId = await startEventStoryGenerationWorkflow(job);
-      return Response.json({ jobId: job.id, workflowId, status: "queued" }, {
-        status: 202,
-        headers: { "Cache-Control": "no-store" },
-      });
-    } catch {
-      await jobs.markFailed(job.id, "temporal_unavailable");
-      return Response.json({
-        error: "The story was not queued. Check that Temporal and its worker are running.",
-      }, { status: 503 });
-    }
+    return Response.json({ jobId: job.id, workflowId: job.id, status: job.status }, {
+      status: 202,
+      headers: { "Cache-Control": "no-store" },
+    });
   } catch (error) {
     return apiErrorResponse(error);
   }

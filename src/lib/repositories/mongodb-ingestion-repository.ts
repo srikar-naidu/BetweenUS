@@ -8,11 +8,12 @@ export interface ProcessingJob {
   id: string;
   groupId: string;
   fragmentId: string;
+  requesterUserId?: string;
   jobType: "ingest" | "delete_fragment" | "reconstruct_moment" | "transcribe_voice";
   processingVersion: string;
   status: ProcessingJobStatus;
   attemptCount: number;
-  temporalWorkflowId: string | null;
+  workflowId: string | null;
   inputRef: string;
   outputRef: string | null;
   errorMessage: string | null;
@@ -66,6 +67,7 @@ export class MongoIngestionRepository {
     fragmentId: string;
     jobType: ProcessingJob["jobType"];
     processingVersion: string;
+    requesterUserId?: string;
   }): Promise<ProcessingJob> {
     await this.ensureIndexes();
     const id = `${input.jobType}:${input.groupId}:${input.fragmentId}:${input.processingVersion}`;
@@ -77,8 +79,9 @@ export class MongoIngestionRepository {
       processingVersion: input.processingVersion,
       status: "queued",
       attemptCount: 0,
-      temporalWorkflowId: null,
+      workflowId: null,
       inputRef: input.fragmentId,
+      ...(input.requesterUserId ? { requesterUserId: input.requesterUserId } : {}),
       outputRef: null,
       errorMessage: null,
       createdAt: now,
@@ -101,15 +104,14 @@ export class MongoIngestionRepository {
   async markProcessingJobStarted(input: { id: string; workflowId: string }): Promise<void> {
     await this.ensureIndexes();
     await this.processingJobs.updateOne(
-      { _id: input.id, status: { $in: ["queued", "retrying"] } },
+      { _id: input.id, status: { $in: ["queued", "retrying", "running"] } },
       {
         $set: {
           status: "running",
-          temporalWorkflowId: input.workflowId,
+          workflowId: input.workflowId,
           errorMessage: null,
           updatedAt: new Date(),
         },
-        $inc: { attemptCount: 1 },
       },
     );
   }
@@ -141,7 +143,7 @@ export class MongoIngestionRepository {
       {
         $set: {
           status: "queued",
-          temporalWorkflowId: null,
+          workflowId: null,
           outputRef: null,
           errorMessage: null,
           updatedAt: new Date(),

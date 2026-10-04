@@ -258,34 +258,34 @@ This uses Tinker for an actual model-improvement question while protecting the l
 - Pros: measurable partner use, reproducible improvement report, no mandatory production dependency
 - Cons: separate training workflow and possible second model/inference interface; may yield no deployable improvement
 
-## Decision 12: Use Temporal as the single durable processing orchestrator
+## Decision 12: Use MongoDB as the durable processing queue
 
 ### Context
 
-Fragment processing includes multiple steps, external providers, retries, and deletion cleanup that may outlive an HTTP request. A separate Mongo polling queue would duplicate orchestration state and retry logic.
+Fragment processing includes multiple steps, optional external providers, and inference that may outlive an HTTP request. A managed orchestration service is not part of this deployment; existing MongoDB job collections are the durable queue and status store.
 
 ### Chosen approach
 
-Use the Temporal TypeScript SDK for the fragment-processing workflow and a Node worker. MongoDB remains canonical for business records and user-visible job status; do not run a second Mongo-backed queue. Use Temporal Cloud only after access, cost, and Render connectivity are verified.
+Use an independent Node worker that atomically claims queued MongoDB jobs, heartbeats a lease during processing, and allows stale leases to be reclaimed after interruption. Keep HTTP upload handlers limited to persisting fragments/jobs and returning promptly.
 
 ### Reason
 
-The media/AI pipeline has a real need for durable retries and recovery, and the TypeScript SDK matches the selected application runtime.
+MongoDB already stores job records, avoiding another required service/account for the Render demo. A separate worker keeps slow Gemma inference out of HTTP requests and does not depend on a developer machine.
 
 ### Trade-offs
 
-- Pros: durable retries, recovery, activity timeouts, visible workflow state
-- Cons: another service and persistent workflow history; activities must be idempotent and inputs must stay small/non-sensitive
+- Pros: fewer services, durable queue state, recovery after worker interruption, compact deployment
+- Cons: queue claiming, leases, and retry state are application-managed; the initial worker processes one job at a time
 
 ## Decision 13: Add Sentry for pilot observability with strict data minimization
 
 ### Context
 
-The final MVP spans uploads, Temporal activities, local Gemma, Backboard, Tiger Data, and opt-in ElevenLabs calls. Provider and worker failures need actionable diagnostics, but these requests can contain sensitive memories.
+The final MVP spans uploads, MongoDB worker activities, Gemma, Backboard, Tiger Data, and opt-in ElevenLabs calls. Provider and worker failures need actionable diagnostics, but these requests can contain sensitive memories.
 
 ### Chosen approach
 
-Instrument Next.js and the Temporal worker for errors and latency while disabling request/response bodies, GenAI inputs/outputs, user identity, local variables, and replay capture. Scrub events/spans and correlate with opaque job IDs.
+Instrument Next.js and the MongoDB worker for errors and latency while disabling request/response bodies, GenAI inputs/outputs, user identity, local variables, and replay capture. Scrub events/spans and correlate with opaque job IDs.
 
 ### Reason
 
@@ -326,7 +326,7 @@ The implementation plan requires account-specific credit, billing, retention, an
 - Keep Better Auth with Google OAuth as the identity path; require verified email for email-bound invitations and use `/api/auth/callback/google`.
 - (Superseded by Decision 16) Use a private R2 bucket as the production media-storage target, accessed only through a server-side storage adapter. Never use public object URLs or Render's ephemeral disk for production media.
 - Set the authorized external-provider spend ceiling to $0 until account balances/terms are checked and a non-zero per-provider cap is explicitly approved. Every billable integration must have a kill-switch feature flag and usage logging before it can be enabled.
-- Keep Backboard, Tinker, ElevenLabs, Temporal Cloud, and Sentry external calls disabled until their account-specific terms, retention, billing, and privacy configuration are verified. Local Gemma and synthetic demo data remain usable.
+- Keep Backboard, Tinker, ElevenLabs, and Sentry external calls disabled until their account-specific terms, retention, billing, and privacy configuration are verified. Local Gemma and synthetic demo data remain usable.
 - Keep fragment visibility private and AI-processing consent off by default. General AI consent does not authorize external-provider processing; each such use requires provider-specific, informed consent before implementation.
 - (Media bounds superseded by Decision 16) Initial ingestion bounds: JPEG/PNG/WebP images and screenshots up to 15 MiB; MP4 video up to 50 MiB and 60 seconds; text up to 10,000 characters. Validate actual content and media duration server-side, not just the supplied MIME type. Voice uploads and transcription remain disabled until the ElevenLabs gate passes; any later voice feature is separately capped and consented.
 - Use this consent copy for the initial local-AI flow: "Allow AI processing for group moment suggestions. This fragment stays private unless you separately choose Group visibility. Turning this off excludes it from AI processing." External processing must present a separate provider-specific notice and consent before sending data.

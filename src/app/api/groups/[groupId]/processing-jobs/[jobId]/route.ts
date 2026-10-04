@@ -4,7 +4,6 @@ import { momentForGroupMember, visibleMomentsForMember } from "@/lib/auth/group-
 import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
-import { getTemporalClient, startFragmentWorkflow, TemporalConfigurationError } from "@/lib/processing/temporal-client";
 import { hasAnalyzableFragmentSource } from "@/lib/domain/memory";
 import { FRAGMENT_ANALYSIS_VERSION, fragmentAnalysisForMember, fragmentSourceDigest } from "@/lib/ai/fragment-analysis";
 import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-fragment-analysis-repository";
@@ -156,7 +155,6 @@ export async function POST(
       }, { status: 410 });
     }
 
-    await getTemporalClient();
     const reset = await ingestion.resetFailedProcessingJobForRetry({
       groupId,
       id: job.id,
@@ -164,25 +162,8 @@ export async function POST(
     });
     if (!reset) return Response.json({ error: "Processing job is already being retried" }, { status: 409 });
     if (job.jobType === "ingest") await memoryRepository.updateFragmentStatus(groupId, fragment.id, "uploaded");
-    const queuedJob = await ingestion.findProcessingJob(groupId, job.id);
-    if (!queuedJob) return Response.json({ error: "Processing job not found" }, { status: 404 });
-
-    let workflowId: string;
-    try {
-      workflowId = await startFragmentWorkflow(
-        queuedJob,
-        job.jobType === "ingest" ? "processFragmentWorkflow" : "deleteFragmentWorkflow",
-      );
-    } catch {
-      await ingestion.markProcessingJobFailed({ id: job.id, errorMessage: "temporal_unavailable" });
-      if (job.jobType === "ingest") await memoryRepository.updateFragmentStatus(groupId, fragment.id, "rejected");
-      return Response.json({ error: "Processing could not be restarted" }, { status: 503 });
-    }
-    return Response.json({ status: "queued", workflowId }, { status: 202, headers: { "Cache-Control": "no-store" } });
+    return Response.json({ status: "queued", workflowId: job.id }, { status: 202, headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    if (error instanceof TemporalConfigurationError) {
-      return Response.json({ error: "Processing is not configured on this server" }, { status: 503 });
-    }
     return apiErrorResponse(error);
   }
 }

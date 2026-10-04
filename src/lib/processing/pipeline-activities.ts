@@ -1,4 +1,3 @@
-import { ApplicationFailure } from "@temporalio/activity";
 import { createHash } from "node:crypto";
 import { ObjectId } from "mongodb";
 import {
@@ -20,7 +19,7 @@ import { reconstructMoment } from "@/lib/pipeline/moment-reconstruction";
 import { reconstructStoryConnection } from "@/lib/pipeline/story-reconstruction";
 import { generateEventStory, EventStoryGenerationError } from "@/lib/pipeline/event-story-generation";
 import { confirmedMomentsForEventStory } from "@/lib/auth/group-visibility";
-import { hasAnalyzableFragmentSource, hasApprovedTextSource } from "@/lib/domain/memory";
+import { hasAnalyzableFragmentSource } from "@/lib/domain/memory";
 import {
   ElevenLabsApiError,
   ElevenLabsClient,
@@ -33,6 +32,17 @@ import { MongoVoiceStorage } from "@/lib/repositories/mongodb-voice-storage";
 import { isManagedGroupMediaStorageUri, MongoGroupMediaStorage } from "@/lib/repositories/mongodb-group-media-storage";
 import { sampleVideoFrames } from "@/lib/ai/video-frames";
 import { validateGroupMedia } from "@/lib/ingestion/media-validation";
+
+export class ProcessingActivityFailure extends Error {
+  constructor(message: string, readonly type: string) {
+    super(message);
+    this.name = "ProcessingActivityFailure";
+  }
+}
+
+function nonRetryable(message: string, type: string): ProcessingActivityFailure {
+  return new ProcessingActivityFailure(message, type);
+}
 
 export async function markProcessingJobStarted(input: {
   jobId: string;
@@ -57,10 +67,10 @@ export async function verifyIngestedFragment(input: { groupId: string; fragmentI
   const repository = new MongoMemoryRepository(await getMongoDatabase());
   const fragment = await repository.findFragmentById(input.groupId, input.fragmentId);
   if (!fragment || fragment.deletionState !== "active") {
-    throw ApplicationFailure.nonRetryable("Fragment is unavailable for ingestion", "FragmentUnavailable");
+    throw nonRetryable("Fragment is unavailable for ingestion", "FragmentUnavailable");
   }
   if (!hasAnalyzableFragmentSource(fragment) || !fragment.aiProcessingConsent) {
-    throw ApplicationFailure.nonRetryable("Fragment has no consented analysis source", "UnsupportedFragmentType");
+    throw nonRetryable("Fragment has no consented analysis source", "UnsupportedFragmentType");
   }
 }
 
@@ -72,13 +82,13 @@ export async function analyzeFragment(input: {
   const memory = new MongoMemoryRepository(database);
   const fragment = await memory.findFragmentById(input.groupId, input.fragmentId);
   if (!fragment || fragment.deletionState !== "active") {
-    throw ApplicationFailure.nonRetryable("Fragment is unavailable for analysis", "FragmentUnavailable");
+    throw nonRetryable("Fragment is unavailable for analysis", "FragmentUnavailable");
   }
   if (!hasAnalyzableFragmentSource(fragment)) {
-    throw ApplicationFailure.nonRetryable("Fragment has no supported analysis source", "UnsupportedFragmentType");
+    throw nonRetryable("Fragment has no supported analysis source", "UnsupportedFragmentType");
   }
   if (!fragment.aiProcessingConsent) {
-    throw ApplicationFailure.nonRetryable("Fragment AI consent was revoked", "FragmentConsentRevoked");
+    throw nonRetryable("Fragment AI consent was revoked", "FragmentConsentRevoked");
   }
 
   const analysisRepository = new MongoFragmentAnalysisRepository(database);
@@ -99,7 +109,7 @@ export async function analyzeFragment(input: {
         !isManagedGroupMediaStorageUri(fragment.storageUri) ||
         typeof fragment.metadata.mimeType !== "string"
       ) {
-        throw ApplicationFailure.nonRetryable("Private media source is unavailable", "MediaSourceUnavailable");
+        throw nonRetryable("Private media source is unavailable", "MediaSourceUnavailable");
       }
       const stored = await new MongoGroupMediaStorage(database).load({
         storageUri: fragment.storageUri,
@@ -109,12 +119,12 @@ export async function analyzeFragment(input: {
         maximumBytes: fragment.type === "image" ? 12_000_000 : 25_000_000,
       });
       if (!stored) {
-        throw ApplicationFailure.nonRetryable("Private media source is unavailable", "MediaSourceUnavailable");
+        throw nonRetryable("Private media source is unavailable", "MediaSourceUnavailable");
       }
       const validated = validateGroupMedia(stored.bytes, stored.mimeType);
       const checksum = createHash("sha256").update(stored.bytes).digest("hex");
       if (checksum !== fragment.checksumSha256 || validated.type !== fragment.type) {
-        throw ApplicationFailure.nonRetryable("Stored media no longer matches its fragment", "MediaSourceChanged");
+        throw nonRetryable("Stored media no longer matches its fragment", "MediaSourceChanged");
       }
       if (fragment.type === "image") {
         return {
@@ -137,7 +147,7 @@ export async function analyzeFragment(input: {
     fragmentSourceDigest(latest) !== analysis.sourceContentSha256 ||
     latest.visibility !== fragment.visibility
   ) {
-    throw ApplicationFailure.nonRetryable("Fragment eligibility changed during analysis", "FragmentEligibilityChanged");
+    throw nonRetryable("Fragment eligibility changed during analysis", "FragmentEligibilityChanged");
   }
 
   await analysisRepository.save(analysis);
@@ -177,12 +187,12 @@ export async function transcribeVoiceNote(input: {
     !fragment.storageUri ||
     transcript?.status !== "transcribing"
   ) {
-    throw ApplicationFailure.nonRetryable("Voice note is no longer eligible for transcription", "VoiceNoteUnavailable");
+    throw nonRetryable("Voice note is no longer eligible for transcription", "VoiceNoteUnavailable");
   }
   const settings = getElevenLabsTranscriptionSettings();
   if (!settings) {
     await voices.markTranscriptFailed(input.groupId, input.fragmentId);
-    throw ApplicationFailure.nonRetryable("Voice transcription is disabled", "VoiceTranscriptionDisabled");
+    throw nonRetryable("Voice transcription is disabled", "VoiceTranscriptionDisabled");
   }
 
   try {
@@ -195,7 +205,7 @@ export async function transcribeVoiceNote(input: {
       maximumBytes: MAX_VOICE_FILE_BYTES,
     });
     if (!bytes) {
-      throw ApplicationFailure.nonRetryable("Voice note audio is unavailable", "VoiceAudioUnavailable");
+      throw nonRetryable("Voice note audio is unavailable", "VoiceAudioUnavailable");
     }
     validateVoiceClip(bytes, "audio/wav");
     const beforeProviderCall = await memory.findFragmentById(input.groupId, input.fragmentId);
@@ -205,7 +215,7 @@ export async function transcribeVoiceNote(input: {
       beforeProviderCall.transcriptionConsent !== true ||
       beforeProviderCall.storageUri !== fragment.storageUri
     ) {
-      throw ApplicationFailure.nonRetryable("Voice note consent changed before transcription", "VoiceConsentChanged");
+      throw nonRetryable("Voice note consent changed before transcription", "VoiceConsentChanged");
     }
     const result = await new ElevenLabsClient(settings).transcribe({ bytes });
     const latest = await memory.findFragmentById(input.groupId, input.fragmentId);
@@ -217,7 +227,7 @@ export async function transcribeVoiceNote(input: {
       latest.storageUri !== fragment.storageUri ||
       latestTranscript?.status !== "transcribing"
     ) {
-      throw ApplicationFailure.nonRetryable("Voice note consent changed during transcription", "VoiceConsentChanged");
+      throw nonRetryable("Voice note consent changed during transcription", "VoiceConsentChanged");
     }
     const saved = await voices.saveTranscriptResult({
       groupId: input.groupId,
@@ -225,11 +235,11 @@ export async function transcribeVoiceNote(input: {
       result,
     });
     if (!saved) {
-      throw ApplicationFailure.nonRetryable("Voice transcript could not be saved", "VoiceTranscriptUnavailable");
+      throw nonRetryable("Voice transcript could not be saved", "VoiceTranscriptUnavailable");
     }
   } catch (error) {
     await voices.markTranscriptFailed(input.groupId, input.fragmentId);
-    if (error instanceof ApplicationFailure) throw error;
+    if (error instanceof ProcessingActivityFailure) throw error;
     const category = error instanceof ElevenLabsApiError
       ? "ElevenLabsApiError"
       : error instanceof ElevenLabsConfigurationError
@@ -237,7 +247,7 @@ export async function transcribeVoiceNote(input: {
         : error instanceof Error
           ? error.name
           : "VoiceTranscriptionError";
-    throw ApplicationFailure.nonRetryable(
+    throw nonRetryable(
       `Voice transcription failed (${category})`,
       "VoiceTranscriptionFailed",
     );
@@ -251,7 +261,7 @@ export async function reconstructMomentForFragment(input: {
   momentId: string;
 }): Promise<string> {
   if (!ObjectId.isValid(input.groupId) || !ObjectId.isValid(input.requesterUserId)) {
-    throw ApplicationFailure.nonRetryable("Reconstruction requester is unavailable", "RequesterUnavailable");
+    throw nonRetryable("Reconstruction requester is unavailable", "RequesterUnavailable");
   }
   const database = await getMongoDatabase();
   const [membership, group] = await Promise.all([
@@ -265,7 +275,7 @@ export async function reconstructMomentForFragment(input: {
     }),
   ]);
   if (!membership || !group) {
-    throw ApplicationFailure.nonRetryable("Reconstruction requester is no longer a group member", "MembershipUnavailable");
+    throw nonRetryable("Reconstruction requester is no longer a group member", "MembershipUnavailable");
   }
   const result = await reconstructMoment({
     database,
@@ -291,7 +301,7 @@ export async function reconstructStoryForGroup(input: {
   storyId: string;
 }): Promise<{ storyId: string | null; outcome: "candidate" | "insufficient_evidence" }> {
   if (!ObjectId.isValid(input.groupId) || !ObjectId.isValid(input.requesterUserId)) {
-    throw ApplicationFailure.nonRetryable("Story requester is unavailable", "RequesterUnavailable");
+    throw nonRetryable("Story requester is unavailable", "RequesterUnavailable");
   }
   const database = await getMongoDatabase();
   const result = await reconstructStoryConnection({
@@ -310,7 +320,7 @@ export async function reconstructStoryForGroup(input: {
         }),
       ]);
       if (!activeMembership || !activeGroup) {
-        throw ApplicationFailure.nonRetryable(
+        throw nonRetryable(
           "Story requester is no longer a group member",
           "MembershipUnavailable",
         );
@@ -350,11 +360,16 @@ export async function generateEventStoryForGroup(input: { jobId: string }): Prom
   const jobs = new MongoEventStoryGenerationJobRepository(database);
   const job = await jobs.find(input.jobId);
   if (!job) {
-    throw ApplicationFailure.nonRetryable("Event story generation job is unavailable", "EventStoryJobUnavailable");
+    throw nonRetryable("Event story generation job is unavailable", "EventStoryJobUnavailable");
   }
   if (job.status === "succeeded") return;
+  const existingStory = await new MongoEventStoryRepository(database).find(job.groupId);
+  if (existingStory?.generatedByJobId === job.id) {
+    await jobs.markSucceeded(job.id);
+    return;
+  }
   if (!ObjectId.isValid(job.groupId) || !ObjectId.isValid(job.requesterUserId)) {
-    throw ApplicationFailure.nonRetryable("Event story requester is unavailable", "RequesterUnavailable");
+    throw nonRetryable("Event story requester is unavailable", "RequesterUnavailable");
   }
   const [membership, group] = await Promise.all([
     database.collection("group_members").findOne({
@@ -367,7 +382,7 @@ export async function generateEventStoryForGroup(input: { jobId: string }): Prom
     }),
   ]);
   if (!membership || !group) {
-    throw ApplicationFailure.nonRetryable("Event story requester is no longer a group member", "MembershipUnavailable");
+    throw nonRetryable("Event story requester is no longer a group member", "MembershipUnavailable");
   }
 
   const memory = new MongoMemoryRepository(database);
@@ -383,7 +398,7 @@ export async function generateEventStoryForGroup(input: { jobId: string }): Prom
     eligibleMoments.length !== job.momentIds.length ||
     job.momentIds.some((momentId) => !eligibleMoments.some((moment) => moment.id === momentId))
   ) {
-    throw ApplicationFailure.nonRetryable("Event story evidence or consent changed", "EventStoryEvidenceUnavailable");
+    throw nonRetryable("Event story evidence or consent changed", "EventStoryEvidenceUnavailable");
   }
 
   const analyses = await new MongoFragmentAnalysisRepository(database).findMany(
@@ -402,7 +417,7 @@ export async function generateEventStoryForGroup(input: { jobId: string }): Prom
     });
   } catch (error) {
     if (error instanceof EventStoryGenerationError) {
-      throw ApplicationFailure.nonRetryable(error.message, "EventStoryGenerationInvalid");
+      throw nonRetryable(error.message, "EventStoryGenerationInvalid");
     }
     throw error;
   }
@@ -418,7 +433,7 @@ export async function generateEventStoryForGroup(input: { jobId: string }): Prom
     expectedRevision: job.expectedRevision,
   });
   if (!saved) {
-    throw ApplicationFailure.nonRetryable("The event story changed while Gemma was processing", "EventStoryRevisionConflict");
+    throw nonRetryable("The event story changed while Gemma was processing", "EventStoryRevisionConflict");
   }
   await jobs.markSucceeded(job.id);
 }
@@ -488,7 +503,7 @@ export async function deleteStoredFragment(input: { groupId: string; fragmentId:
       fragmentId: input.fragmentId,
     });
   } else if (fragment.source === "upload" && fragment.storageUri) {
-    throw ApplicationFailure.nonRetryable(
+    throw nonRetryable(
       "Legacy media storage is unavailable; remove the object manually",
       "LegacyMediaCleanupRequired",
     );

@@ -22,7 +22,7 @@ MVP scope includes:
 - basic corrections
 - group-scoped Backboard memory for member-confirmed corrections and aliases
 - opt-in voice-note transcription through ElevenLabs, only after privacy/retention and credit checks
-- Temporal workflows for durable multi-step processing and retries
+- MongoDB-backed durable jobs with a separate Render worker, leases, and restart recovery
 - Sentry monitoring with request bodies, AI content, media, and user identity collection disabled
 - a capped Tinker specialization experiment with a written baseline comparison; not required for production inference
 

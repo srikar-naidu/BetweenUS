@@ -15,7 +15,7 @@ The pipeline turns independent group Fragments into evidence-backed Moment hypot
 
 ```text
 Text/image/video capture -> validate -> Mongo Fragment/ProcessingJob
-  -> Temporal workflow (opaque IDs)
+  -> MongoDB queue worker (opaque IDs)
   -> Gemma Observation (or opt-in voice STT -> author-reviewed transcript -> Observation)
   -> Mongo structured graph + authorized Tiger projection
   -> Tiger temporal/semantic retrieval + Mongo relationship expansion
@@ -28,7 +28,7 @@ Text/image/video capture -> validate -> Mongo Fragment/ProcessingJob
   -> member confirm/reject -> evaluation example -> gated Tinker study
 ```
 
-Text, image, and short video ingestion, consent-gated observations, group-scoped retrieval, and Temporal worker processing are implemented. New posts are group-visible because they are created within a group. Voice audio is stored in MongoDB GridFS and never sent to Gemma; optional external transcription is separately gated.
+Text, image, and short video ingestion, consent-gated observations, group-scoped retrieval, and MongoDB queue-worker processing are implemented. New posts are group-visible because they are created within a group. Voice audio is stored in MongoDB GridFS and never sent to Gemma; optional external transcription is separately gated.
 
 ## 1. Ingestion and provenance
 
@@ -49,7 +49,7 @@ For an active, consented text fragment, a worker calls the configured `GemmaServ
 
 Visual observations are always tentative (maximum confidence 0.7), cannot identify people or infer relationships/sensitive attributes/exact locations, and require an authorized image/frame locator. Video keyframes are bounded; the worker does not send an archive or every frame. Malformed or unsupported output is rejected, not persisted as fact. Media bytes are fetched only for processing, are not logged or duplicated in derived stores, and remain subject to the fragment's existing deletion lifecycle.
 
-For opted-in voice notes, a separate Temporal activity sends only the selected source audio and minimum options to ElevenLabs Scribe after account terms/retention and usage-cap gates pass. Store the transcript and word timestamps as derived evidence linked to the audio. Speaker diarization is off. The author reviews/edits transcript content before group retrieval; approved transcript quotes remain labeled as transcript-derived evidence. If the provider is disabled or a budget is exhausted, keep the note private for manual transcription.
+For opted-in voice notes, a separate MongoDB worker job sends only the selected source audio and minimum options to ElevenLabs Scribe after account terms/retention and usage-cap gates pass. Store the transcript and word timestamps as derived evidence linked to the audio. Speaker diarization is off. The author reviews/edits transcript content before group retrieval; approved transcript quotes remain labeled as transcript-derived evidence. If the provider is disabled or a budget is exhausted, keep the note private for manual transcription.
 
 ## 3. Structured memory and retrieval
 
@@ -114,15 +114,15 @@ ElevenLabs TTS may narrate only a member-approved/confirmed Moment or Story, fro
 
 ## 11. Durable orchestration and observability
 
-Temporal owns text/media ingestion, observation, Moment reconstruction, member-triggered Story reconstruction, deletion cleanup, and future scheduled convergence with idempotent activities, explicit timeouts/retries, and stable workflow IDs. MongoDB owns job status and domain state. Workflow arguments/results contain only opaque IDs and small status values. Activities fetch authorized evidence/context at execution time, persist outputs in MongoDB/Tiger, and return opaque references.
+The MongoDB-backed worker processes text/media ingestion, observations, Moment reconstruction, member-triggered Story reconstruction, and deletion cleanup from durable job records. Claims are atomic, each job has a renewable lease, and expired worker leases can be reclaimed. MongoDB owns job status and domain state. Job records contain only opaque IDs and small status values; worker activities fetch authorized evidence/context at execution time and persist outputs in MongoDB/Tiger.
 
 Mastra is not a durable job store. Sentry should trace workflow steps, Gemma calls, retrieval, optional scoring, provider calls, latency, and failures using scrubbed operation names and opaque IDs. Disable request bodies, media, prompts/completions, transcripts, direct identity, session replay, and sensitive span attributes. A telemetry failure must not affect processing.
 
 ## Current production and demo boundary
 
-The group page queues member-triggered Moment reconstruction as an idempotent Temporal workflow for active, group-visible, AI-consented fragments. Workflow history contains opaque group, fragment, job, and requester IDs only; the worker rechecks active membership before fetching authorized context. The production path retrieves a bounded `ContextPacket`, optionally retrieves up to three Mongo-provenance-checked Backboard memories when the group has opted in, asks Gemma for candidate evidence/contradiction/missing-evidence notes, rechecks source eligibility before persistence, validates cited IDs/quotes/relationships, derives uncertainty deterministically, and persists the result with model/retrieval/validation provenance. The UI polls the job for a reviewable result. Insufficient evidence is persisted as an `unknown` draft and is not shown as a candidate.
+The group page queues member-triggered Moment reconstruction as an idempotent MongoDB job for active, group-visible, AI-consented fragments. Queue records contain opaque group, fragment, job, and requester IDs only; the worker rechecks active membership before fetching authorized context. The production path retrieves a bounded `ContextPacket`, optionally retrieves up to three Mongo-provenance-checked Backboard memories when the group has opted in, asks Gemma for candidate evidence/contradiction/missing-evidence notes, rechecks source eligibility before persistence, validates cited IDs/quotes/relationships, derives uncertainty deterministically, and persists the result with model/retrieval/validation provenance. The UI polls the job for a reviewable result. Insufficient evidence is persisted as an `unknown` draft and is not shown as a candidate.
 
-For Stories, the group page queues a separate idempotent Temporal workflow. It starts only from confirmed Moments and current eligible source observations, stores only opaque IDs/status in workflow history, and persists any validated Story candidate in MongoDB. The UI polls the job and lets group members confirm/reject the candidate. Inference or Temporal unavailability does not block uploads or Moment review.
+For Stories, the group page queues a separate idempotent MongoDB job. It starts only from confirmed Moments and current eligible source observations, stores only opaque IDs/status in the job record, and persists any validated Story candidate in MongoDB. The UI polls the job and lets group members confirm/reject the candidate. Inference or worker unavailability does not block uploads or Moment review; queued jobs remain durable until a worker is available.
 
 Group members can confirm, reject, merge, correct a person/place/reference, undo the latest correction, and remove evidence. These actions append actor/time/before/after snapshots. Merge writes require MongoDB transactions. Backboard stays disabled until an owner/admin explicitly opts the group in. Only a correction on a confirmed Moment can be sent, and a member must separately choose to share it. Brief summaries/entities from eligible group-visible fragments are sent only as search queries; raw source text is not sent to Backboard. Provider operation references and source provenance are retained in MongoDB. Disabling the integration deletes its per-group assistant and memories; a failed Backboard read degrades to no semantic group context.
 

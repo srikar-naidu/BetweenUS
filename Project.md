@@ -1751,8 +1751,8 @@ This amendment records the user's final-MVP sponsor decisions while preserving t
 
 - Gemma remains the default local reasoning model.
 - Backboard stores only confirmed, group-scoped high-level memory; MongoDB remains canonical.
-- Temporal owns durable fragment-processing execution and retries; MongoDB stores business/job status.
-- Sentry monitors the Next.js app and Temporal worker with media, request bodies, AI content, and direct user identifiers excluded.
+- A MongoDB-backed Render worker owns durable fragment-processing execution and retries; MongoDB also stores canonical business and job status.
+- Sentry monitors the Next.js app and background worker with media, request bodies, AI content, and direct user identifiers excluded.
 - ElevenLabs is used only for an explicitly opted-in voice-note transcription path after retention and credit checks.
 - Tinker gets one capped, de-identified baseline-comparison experiment after evaluation data exists; it does not replace Gemma by default.
 - Render remains the deployment target; GitHub Copilot remains a development aid, not runtime infrastructure.
