@@ -541,3 +541,26 @@ export function getDemoFragments(): DemoFragment[] {
 export function getDemoMoments(): Moment[] {
   return [...demoCache.moments.values()];
 }
+
+export function getSampleDemoMoment(): Moment {
+  const createdAt = new Date("2026-09-04T12:16:00Z");
+  return {
+    id: "demo-moment-cafeteria-example",
+    groupId: group.id,
+    title: "The cafeteria rush",
+    summary: "A quick lunch turned into a little celebration when the cafeteria doors finally opened.",
+    confidence: 0.82,
+    uncertaintyLabel: "likely",
+    uncertaintyReason: "Three nearby fragments from different people share the cafeteria as a place. It is a strong candidate, not a confirmed memory.",
+    startAt: sampleFragments[0].capturedAt,
+    endAt: sampleFragments[2].capturedAt,
+    status: "candidate",
+    evidence: [
+      { fragmentId: sampleFragments[0].id, relationship: "entity_overlap" },
+      { fragmentId: sampleFragments[1].id, relationship: "temporal" },
+      { fragmentId: sampleFragments[2].id, relationship: "shared_location" },
+    ],
+    createdAt,
+    updatedAt: createdAt,
+  };
+}

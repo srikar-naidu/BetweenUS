@@ -8,6 +8,8 @@ import type { DemoFragment, DemoReconstructionResult } from "@/lib/pipeline/demo
 interface Props {
   initialFragments: DemoFragment[];
   initialMoment: Moment | null;
+  initialMomentIsExample: boolean;
+  enableLiveReconstruction: boolean;
 }
 
 const fragmentKinds: Record<Fragment["type"], string> = {
@@ -35,9 +37,15 @@ const relationshipLabels: Record<MomentEvidence["relationship"], string> = {
   entity_overlap: "Shared details",
 };
 
-export function ReconstructionDemo({ initialFragments, initialMoment }: Props) {
+export function ReconstructionDemo({
+  initialFragments,
+  initialMoment,
+  initialMomentIsExample,
+  enableLiveReconstruction,
+}: Props) {
   const [fragments, setFragments] = useState(initialFragments);
   const [moment, setMoment] = useState(initialMoment);
+  const [isExample, setIsExample] = useState(initialMomentIsExample);
   const [uncertaintyReason, setUncertaintyReason] = useState(
     initialMoment?.uncertaintyReason ?? null,
   );
@@ -56,10 +64,12 @@ export function ReconstructionDemo({ initialFragments, initialMoment }: Props) {
         setFragments(body.candidateFragments);
         if (body.outcome === "insufficient_evidence") {
           setMoment(null);
+          setIsExample(false);
           setUncertaintyReason(body.uncertaintyReason);
           return;
         }
         setMoment(body.moment);
+        setIsExample(false);
         setUncertaintyReason(body.moment.uncertaintyReason);
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Moment reconstruction failed");
@@ -93,7 +103,7 @@ export function ReconstructionDemo({ initialFragments, initialMoment }: Props) {
       </div>
       <div className="moment-panel" aria-live="polite">
         <div className="section-head">
-          <h2>Reconstructed moment</h2>
+          <h2>A possible moment</h2>
           {moment && <span className="moment-status">{moment.uncertaintyLabel}</span>}
         </div>
         {moment ? (
@@ -101,6 +111,7 @@ export function ReconstructionDemo({ initialFragments, initialMoment }: Props) {
             <h3 className="moment-title">{moment.title ?? "A possible moment"}</h3>
             <p className="moment-summary">{moment.summary}</p>
             <p className="empty-moment">{uncertaintyReason}</p>
+            {isExample && <p className="sample-moment-note">ILLUSTRATIVE EXAMPLE · MEMBERS ALWAYS DECIDE</p>}
             <details className="moment-why" open>
               <summary>Why these fragments connect <span aria-hidden="true">−</span></summary>
               <ul className="evidence-list">
@@ -115,20 +126,24 @@ export function ReconstructionDemo({ initialFragments, initialMoment }: Props) {
                 })}
               </ul>
             </details>
-            <div className="confidence">
-              <span>Model confidence, not factual probability</span>
-              <span>{Math.round(moment.confidence * 100)}%</span>
-            </div>
+            {!isExample && (
+              <div className="confidence">
+                <span>Model confidence, not factual probability</span>
+                <span>{Math.round(moment.confidence * 100)}%</span>
+              </div>
+            )}
           </>
         ) : (
           <p className="empty-moment">{uncertaintyReason ?? "The candidate moment will appear here with its source evidence."}</p>
         )}
-        <div className="action-row">
-          <button className="primary-button" disabled={isPending} onClick={reconstruct}>
-            {isPending ? "Reconstructing…" : "Reconstruct moment"}
-          </button>
-          {error && <span className="error-message" role="alert">{error}</span>}
-        </div>
+        {enableLiveReconstruction && (
+          <div className="action-row">
+            <button className="primary-button" disabled={isPending} onClick={reconstruct}>
+              {isPending ? "Connecting the clues…" : "Try a live reconstruction"}
+            </button>
+            {error && <span className="error-message" role="alert">{error}</span>}
+          </div>
+        )}
       </div>
     </section>
   );
