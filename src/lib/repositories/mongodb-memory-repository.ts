@@ -350,6 +350,42 @@ export class MongoMemoryRepository {
     return document ? asFragment(document) : null;
   }
 
+  async enableAutomaticGroupFragmentAnalysis(input: {
+    groupId: string;
+    fragmentId: string;
+    processingVersion: string;
+  }): Promise<Fragment | null> {
+    const now = new Date();
+    const result = await this.fragments.updateOne(
+      {
+        _id: input.fragmentId,
+        groupId: input.groupId,
+        visibility: "group",
+        deletionState: "active",
+        aiProcessingConsent: { $ne: true },
+        aiProcessingConsentRevokedAt: null,
+      },
+      {
+        $set: {
+          aiProcessingConsent: true,
+          aiProcessingConsentAt: now,
+          aiProcessingConsentRevokedAt: null,
+          processingVersion: input.processingVersion,
+        },
+      },
+    );
+    if (result.modifiedCount !== 1) return null;
+    const document = await this.fragments.findOne({
+      _id: input.fragmentId,
+      groupId: input.groupId,
+      visibility: "group",
+      deletionState: "active",
+      aiProcessingConsent: true,
+      processingVersion: input.processingVersion,
+    });
+    return document ? asFragment(document) : null;
+  }
+
   async invalidateMomentsForFragment(groupId: string, fragmentId: string): Promise<void> {
     await this.moments.updateMany(
       { groupId, "evidence.fragmentId": fragmentId, status: { $in: ["candidate", "confirmed"] } },

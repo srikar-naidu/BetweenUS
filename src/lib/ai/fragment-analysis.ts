@@ -221,23 +221,6 @@ function validateTextArray(value: unknown, label: string, maxItems: number, sour
   return [...new Set(values)];
 }
 
-function validateObservationList(
-  value: unknown,
-  label: string,
-  maxItems: number,
-  observedFacts: readonly FragmentObservationFact[],
-): string[] {
-  if (!Array.isArray(value) || value.length > maxItems) {
-    throw new FragmentAnalysisValidationError(`Gemma returned invalid ${label}`);
-  }
-  const values = value.map((item) => validateText(item, label, 120));
-  const supported = new Set(observedFacts.map((fact) => fact.value));
-  if (values.some((item) => !supported.has(item))) {
-    throw new FragmentAnalysisValidationError(`Gemma returned ${label} without matching evidence`);
-  }
-  return [...new Set(values)];
-}
-
 export function validateFragmentAnalysisOutput(
   result: Record<string, unknown>,
   fragmentId: string,
@@ -254,14 +237,6 @@ export function validateFragmentAnalysisOutput(
     : (() => { throw new FragmentAnalysisValidationError("Gemma returned an invalid summary"); })();
   if (isTextual && proposedSummary && !sourceText.includes(proposedSummary)) {
     throw new FragmentAnalysisValidationError("Gemma returned a summary that is not present in the source text");
-  }
-  if (
-    typeof result.confidence !== "number" ||
-    !Number.isFinite(result.confidence) ||
-    result.confidence < 0 ||
-    result.confidence > (isTextual ? 1 : 0.7)
-  ) {
-    throw new FragmentAnalysisValidationError("Gemma returned an invalid confidence value");
   }
   if (!Array.isArray(result.observed_facts) || result.observed_facts.length > MAX_FRAGMENT_FACTS) {
     throw new FragmentAnalysisValidationError("Gemma returned invalid observed facts");
@@ -308,14 +283,14 @@ export function validateFragmentAnalysisOutput(
       typeof fact.confidence !== "number" ||
       !Number.isFinite(fact.confidence) ||
       fact.confidence < 0 ||
-      fact.confidence > (isTextual ? 1 : 0.7)
+      fact.confidence > 1
     ) {
       throw new FragmentAnalysisValidationError("Gemma returned invalid fact provenance or confidence");
     }
     return {
       type: fact.type as FragmentFactType,
       value,
-      confidence: fact.confidence,
+      confidence: isTextual ? fact.confidence : Math.min(0.7, fact.confidence),
       evidence: {
         fragmentId,
         modality: evidenceSource,
@@ -324,6 +299,20 @@ export function validateFragmentAnalysisOutput(
       },
     };
   });
+  let confidence = 0;
+  if (isTextual) {
+    if (
+      typeof result.confidence !== "number" ||
+      !Number.isFinite(result.confidence) ||
+      result.confidence < 0 ||
+      result.confidence > 1
+    ) {
+      throw new FragmentAnalysisValidationError("Gemma returned an invalid confidence value");
+    }
+    confidence = result.confidence;
+  } else if (observedFacts.length) {
+    confidence = Math.min(0.7, ...observedFacts.map((fact) => fact.confidence));
+  }
   const summary = isTextual
     ? proposedSummary
     : observedFacts.slice(0, 5).map((fact) => fact.value).join("; ");
@@ -333,18 +322,21 @@ export function validateFragmentAnalysisOutput(
 
   const people = isTextual
     ? validateTextArray(result.people, "people", 20, sourceText)
-    : validateObservationList(result.people, "people", 20, observedFacts);
+    : [...new Set(observedFacts.filter((fact) => fact.type === "person").map((fact) => fact.value))];
   const entities = isTextual
     ? validateTextArray(result.entities, "entities", 30, sourceText)
-    : validateObservationList(
-        result.entities,
-        "entities",
-        30,
-        observedFacts.filter((fact) => fact.type !== "person"),
-      );
-  const locationHint = validateOptionalHint(result.location_hint, "location hint");
-  const activityHint = validateOptionalHint(result.activity_hint, "activity hint");
-  const toneHint = validateOptionalHint(result.tone_hint, "tone hint");
+    : [...new Set(observedFacts
+        .filter((fact) => fact.type !== "person")
+        .map((fact) => fact.value))];
+  const locationHint = isTextual
+    ? validateOptionalHint(result.location_hint, "location hint")
+    : observedFacts.find((fact) => fact.type === "place")?.value ?? null;
+  const activityHint = isTextual
+    ? validateOptionalHint(result.activity_hint, "activity hint")
+    : observedFacts.find((fact) => fact.type === "activity")?.value ?? null;
+  const toneHint = isTextual
+    ? validateOptionalHint(result.tone_hint, "tone hint")
+    : observedFacts.find((fact) => fact.type === "tone")?.value ?? null;
   for (const [hint, factType, label] of [
     [locationHint, "place", "location"],
     [activityHint, "activity", "activity"],
@@ -380,7 +372,7 @@ export function validateFragmentAnalysisOutput(
     locationHint,
     activityHint,
     toneHint,
-    confidence: result.confidence,
+    confidence,
     uncertainty: { status: expectedStatus, reason },
     evidenceFragmentIds: [fragmentId],
     requiresReview: !isTextual,
@@ -458,13 +450,18 @@ export async function generateFragmentAnalysis(
   const textSource = fragment.textContent ?? "";
   const visualConstraints = [
     "Describe only observable details. Do not identify people, infer relationships, sensitive traits, or exact locations.",
-    "Every fact must have evidence with this fragment ID, the supplied modality, a supplied image/frame locator, and a short description that includes the fact value.",
+    "Every fact must have evidence with this fragment ID, the supplied modality, and a supplied image/frame locator.",
+    "The evidence string must contain the fact value as an exact, case-matching substring. Before returning, check every fact and remove any fact whose value is not literally present in its evidence string.",
     "Treat visual observations as tentative and never present them as verified facts. Keep confidence at or below 0.7.",
+    "People must exactly repeat values of person facts; entities must exactly repeat values of non-person facts.",
+    "Each non-null location_hint, activity_hint, or tone_hint must exactly match a fact of the corresponding type; otherwise return null.",
     "Use visible_text only for legible text shown in the supplied image/frame. Do not invent OCR.",
     "Do not infer dates or event context from appearance. Use the provided capture timestamp only as metadata.",
+    "Set uncertainty.status to possible when observed_facts is non-empty, otherwise unknown.",
+    "Return empty people/entities arrays and null hints when no matching cited fact supports them.",
     "Return unknown uncertainty when no directly observable evidence supports an observation.",
   ];
-  const result = await provider.generateStructured({
+  const generationInput: StructuredGenerationInput = {
     task: isTextual ? "analyze_text_fragment" : "analyze_visual_fragment",
     contextPacket: {
       fragment_id: fragment.id,
@@ -492,14 +489,43 @@ export async function generateFragmentAnalysis(
     },
     responseSchema: fragmentAnalysisResponseSchema(fragment.id, evidenceSource, evidenceLocators),
     ...(mediaInput ? { images: [...mediaInput.images] } : {}),
-  });
-  const validated = validateFragmentAnalysisOutput(
-    result,
-    fragment.id,
-    textSource,
-    evidenceSource,
-    evidenceLocators,
-  );
+  };
+  let result = await provider.generateStructured(generationInput);
+  let validated: MemoryObservation;
+  try {
+    validated = validateFragmentAnalysisOutput(
+      result,
+      fragment.id,
+      textSource,
+      evidenceSource,
+      evidenceLocators,
+    );
+  } catch (error) {
+    if (isTextual || !(error instanceof FragmentAnalysisValidationError)) throw error;
+    result = await provider.generateStructured({
+      ...generationInput,
+      task: "repair_visual_fragment_observations",
+      contextPacket: {
+        ...generationInput.contextPacket,
+        previous_output: result,
+        repair_instructions: [
+          "Regenerate the complete output using the supplied image evidence and exact required response schema.",
+          "Each fact's evidence string must contain its value exactly, with matching spelling and case.",
+          "The overall confidence must be at most 0.7 and no fact confidence may exceed 0.7.",
+          "Remove any fact that cannot be supported with a matching evidence string.",
+          "The people/entities arrays and hints must match the remaining cited facts exactly.",
+          "Return unknown uncertainty and no facts if there is insufficient direct visual evidence.",
+        ],
+      },
+    });
+    validated = validateFragmentAnalysisOutput(
+      result,
+      fragment.id,
+      textSource,
+      evidenceSource,
+      evidenceLocators,
+    );
+  }
   return {
     ...validated,
     id: `${fragment.groupId}:${fragment.id}:${FRAGMENT_ANALYSIS_VERSION}`,

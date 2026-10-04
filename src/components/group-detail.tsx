@@ -956,21 +956,11 @@ export function GroupDetail({
                       </button>
                     )}
                   {fragment.aiProcessingConsent && (
-                    <p className="fragment-processing-status" role="status">
-                      {fragment.type === "voice" && !fragment.transcriptReviewedAt
-                        ? "Gemma waits until you review the transcript; the audio itself is not sent."
-                        : fragment.status === "needs_review"
-                        ? "Gemma observations are ready for review; they are not verified facts."
-                        : fragment.processingJobStatus === "queued" ||
-                            fragment.processingJobStatus === "running" ||
-                            fragment.processingJobStatus === "retrying"
-                          ? `Private Gemma processing: ${fragment.processingJobStatus}.`
-                          : fragment.processingJobStatus === "failed" || fragment.status === "rejected"
-                            ? "Private Gemma processing failed. The original fragment is still saved."
-                            : fragment.status === "processed"
-                              ? "Private Gemma analysis is ready for reconstruction."
-                              : "Private Gemma processing is waiting to start."}
-                    </p>
+                    fragment.status === "needs_review" && (
+                      <p className="fragment-processing-status" role="status">
+                        Gemma observations are ready for review; they are not verified facts.
+                      </p>
+                    )
                   )}
                   {fragment.aiProcessingConsent && fragment.processingJobStatus === "failed" && (
                     <p className="fragment-processing-status" role="status">
@@ -1017,7 +1007,6 @@ export function GroupDetail({
                     <VoiceTranscriptReview
                       groupId={groupId}
                       fragmentId={fragment.id}
-                      initialAiConsent={fragment.aiProcessingConsent}
                       onApproved={(updated) => {
                         setFragments((current) => current.map((item) =>
                           item.id === updated.id ? updated : item,

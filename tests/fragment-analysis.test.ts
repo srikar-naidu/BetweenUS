@@ -151,3 +151,70 @@ test("fragment-analysis schema binds evidence to its source and disallows confir
   assert.deepEqual(schema.properties.fragment_id.enum, [fragmentId]);
   assert.deepEqual(schema.properties.uncertainty.properties.status.enum, ["possible", "unknown"]);
 });
+
+test("visual summary fields are derived only from validated, cited observations", () => {
+  const visualOutput = {
+    ...validOutput,
+    summary: "",
+    observed_facts: [
+      {
+        type: "object",
+        value: "wooden balcony",
+        confidence: 0.99,
+        evidence: {
+          fragment_id: fragmentId,
+          modality: "image",
+          locator: "whole_image",
+          evidence: "A wooden balcony is visible on the building.",
+        },
+      },
+      {
+        type: "place",
+        value: "building",
+        confidence: 0.5,
+        evidence: {
+          fragment_id: fragmentId,
+          modality: "image",
+          locator: "whole_image",
+          evidence: "A wooden balcony is visible on the building.",
+        },
+      },
+    ],
+    people: ["Unsupported person"],
+    entities: ["Unsupported entity"],
+    location_hint: "Unsupported location",
+    activity_hint: "Unsupported activity",
+    tone_hint: "Unsupported tone",
+    confidence: 0.99,
+    evidence_fragment_ids: [fragmentId],
+  };
+
+  const analysis = validateFragmentAnalysisOutput(
+    visualOutput,
+    fragmentId,
+    "",
+    "image",
+    ["whole_image"],
+  );
+
+  assert.equal(analysis.summary, "wooden balcony; building");
+  assert.deepEqual(analysis.people, []);
+  assert.deepEqual(analysis.entities, ["wooden balcony", "building"]);
+  assert.equal(analysis.locationHint, "building");
+  assert.equal(analysis.activityHint, null);
+  assert.equal(analysis.toneHint, null);
+  assert.equal(analysis.confidence, 0.5);
+  assert.throws(
+    () => validateFragmentAnalysisOutput({
+      ...visualOutput,
+      observed_facts: [{
+        ...visualOutput.observed_facts[0],
+        evidence: {
+          ...visualOutput.observed_facts[0].evidence,
+          evidence: "A building is visible.",
+        },
+      }],
+    }, fragmentId, "", "image", ["whole_image"]),
+    /ungrounded visual observation/,
+  );
+});

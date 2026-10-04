@@ -7,7 +7,7 @@
     "node": ">=20.19.0 <22 || >=22.12.0 <23 || >=23.2.0"
   },
   "scripts": {
-    "dev": "node --require ./scripts/node-dns-bootstrap.cjs ./node_modules/next/dist/bin/next dev",
+    "dev": "node ./scripts/dev-with-worker.mjs",
     "build": "node --require ./scripts/node-dns-bootstrap.cjs ./node_modules/next/dist/bin/next build",
     "start": "node --require ./scripts/node-dns-bootstrap.cjs ./node_modules/next/dist/bin/next start",
     "worker": "node --require ./scripts/node-dns-bootstrap.cjs --import tsx ./src/processing-worker.ts",

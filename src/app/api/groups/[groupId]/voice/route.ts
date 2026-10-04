@@ -73,11 +73,7 @@ export async function POST(
       return Response.json({ error: "Choose whether to send this audio to ElevenLabs for transcription" }, { status: 400 });
     }
     const transcriptionConsent = consentValue === "true";
-    const aiConsentValue = request.headers.get("x-ai-processing-consent");
-    if (aiConsentValue !== "true" && aiConsentValue !== "false") {
-      return Response.json({ error: "Choose whether Gemma may analyze the reviewed transcript" }, { status: 400 });
-    }
-    const aiProcessingConsent = aiConsentValue === "true";
+    const aiProcessingConsent = false;
     const encodedCaption = request.headers.get("x-fragment-caption") ?? "";
     if (encodedCaption.length > MAX_MEDIA_CAPTION_CHARACTERS * 3) {
       return Response.json({ error: "Captions must be 1,000 characters or fewer" }, { status: 400 });

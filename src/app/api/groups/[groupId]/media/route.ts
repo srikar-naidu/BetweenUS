@@ -19,6 +19,7 @@ import {
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { isManagedGroupMediaStorageUri, MongoGroupMediaStorage } from "@/lib/repositories/mongodb-group-media-storage";
 import type { Fragment } from "@/lib/domain/memory";
+import { shouldAutomaticallyAnalyzeGroupPost } from "@/lib/processing/automatic-group-analysis";
 
 export const runtime = "nodejs";
 
@@ -107,11 +108,7 @@ export async function POST(
     }
     const bytes = await readMediaBytes(request, maximumBytes);
     const media = validateGroupMedia(bytes, mediaType);
-    const consentHeader = request.headers.get("x-ai-processing-consent");
-    if (consentHeader !== null && consentHeader !== "true" && consentHeader !== "false") {
-      throw new FragmentInputError("AI processing consent must be explicit");
-    }
-    const aiProcessingConsent = consentHeader === "true";
+    const aiProcessingConsent = shouldAutomaticallyAnalyzeGroupPost(visibilityValue);
     const requestId = request.headers.get("Idempotency-Key");
     if (!requestId || !/^[0-9a-f-]{36}$/i.test(requestId)) {
       throw new FragmentInputError("A UUID Idempotency-Key is required");

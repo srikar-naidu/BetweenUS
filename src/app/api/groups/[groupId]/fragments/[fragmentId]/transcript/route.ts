@@ -7,6 +7,7 @@ import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-r
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { MongoVoiceRepository } from "@/lib/repositories/mongodb-voice-repository";
 import type { Fragment } from "@/lib/domain/memory";
+import { shouldAutomaticallyAnalyzeGroupPost } from "@/lib/processing/automatic-group-analysis";
 
 export const runtime = "nodejs";
 
@@ -60,16 +61,15 @@ export async function PATCH(
     const input = body as Record<string, unknown>;
     const transcriptText = input.transcript;
     const visibility = input.visibility;
-    const aiProcessingConsent = input.aiProcessingConsent;
     if (
       typeof transcriptText !== "string" ||
       !transcriptText.trim() ||
       transcriptText.length > MAX_VOICE_TRANSCRIPT_CHARACTERS ||
-      !isFragmentVisibility(visibility) ||
-      typeof aiProcessingConsent !== "boolean"
+      !isFragmentVisibility(visibility)
     ) {
-      return Response.json({ error: "Transcript, visibility, and AI consent are required" }, { status: 400 });
+      return Response.json({ error: "Transcript and visibility are required" }, { status: 400 });
     }
+    const aiProcessingConsent = shouldAutomaticallyAnalyzeGroupPost(visibility);
 
     const database = await getMongoDatabase();
     const memory = new MongoMemoryRepository(database);

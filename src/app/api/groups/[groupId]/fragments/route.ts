@@ -6,6 +6,7 @@ import { FragmentInputError, validateTextFragment } from "@/lib/ingestion/fragme
 import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
+import { shouldAutomaticallyAnalyzeGroupPost } from "@/lib/processing/automatic-group-analysis";
 
 export const runtime = "nodejs";
 
@@ -51,7 +52,11 @@ export async function POST(
     } catch {
       return Response.json({ error: "A JSON body is required" }, { status: 400 });
     }
-    const input = validateTextFragment(body);
+    const submitted = validateTextFragment(body);
+    const input = {
+      ...submitted,
+      aiProcessingConsent: shouldAutomaticallyAnalyzeGroupPost(submitted.visibility),
+    };
     const requestId = request.headers.get("Idempotency-Key");
     if (!requestId || !/^[0-9a-f-]{36}$/i.test(requestId)) {
       return Response.json({ error: "A UUID Idempotency-Key is required" }, { status: 400 });

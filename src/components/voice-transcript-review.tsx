@@ -14,17 +14,14 @@ interface TranscriptResponse {
 export function VoiceTranscriptReview({
   groupId,
   fragmentId,
-  initialAiConsent,
   onApproved,
 }: {
   groupId: string;
   fragmentId: string;
-  initialAiConsent: boolean;
   onApproved: (fragment: GroupFragmentView) => void;
 }) {
   const [transcript, setTranscript] = useState("");
   const [status, setStatus] = useState<TranscriptResponse["status"] | null>(null);
-  const [aiConsent, setAiConsent] = useState(initialAiConsent);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -71,12 +68,10 @@ export function VoiceTranscriptReview({
         body: JSON.stringify({
           transcript,
           visibility: "group",
-          aiProcessingConsent: aiConsent,
         }),
       });
       const result = await response.json() as {
         fragment?: GroupFragmentView;
-        processingStatus?: string | null;
         error?: string;
       };
       if (!response.ok || !result.fragment) {
@@ -85,9 +80,7 @@ export function VoiceTranscriptReview({
       }
       onApproved(result.fragment);
       setStatus("reviewed");
-      setMessage(result.processingStatus === "queued"
-        ? "Transcript approved, shared with the group, and Gemma analysis queued."
-        : "Transcript approved and shared with the group.");
+      setMessage("Transcript approved and shared with the group. Gemma will analyze the reviewed text.");
     } catch {
       setMessage("Could not reach the transcript review service.");
     } finally {
@@ -118,10 +111,6 @@ export function VoiceTranscriptReview({
               required
               onChange={(event) => setTranscript(event.target.value)}
             />
-          </label>
-          <label className="consent-control">
-            <input type="checkbox" checked={aiConsent} onChange={(event) => setAiConsent(event.target.checked)} />
-            Allow Gemma to classify this approved transcript
           </label>
           <button className="secondary-button" type="submit" disabled={pending || !transcript.trim()}>
             {pending ? "Saving…" : "Approve transcript"}

@@ -17,6 +17,7 @@ import { FRAGMENT_ANALYSIS_VERSION, fragmentAnalysisForMember, fragmentSourceDig
 import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-fragment-analysis-repository";
 import { isManagedGroupMediaStorageUri } from "@/lib/repositories/mongodb-group-media-storage";
 import { safeProcessingFailureCategory } from "@/lib/processing/failure-category";
+import { enqueueExistingGroupPostsForAnalysis } from "@/lib/processing/automatic-group-analysis";
 
 export const dynamic = "force-dynamic";
 
@@ -53,12 +54,13 @@ export default async function GroupPage({
   const repository = new MongoMemoryRepository(database);
   const storyRepository = new MongoStoryRepository(database);
   const ingestionRepository = new MongoIngestionRepository(database);
-  const [memberFragments, groupMoments, groupStories, pendingStoryJobs] = await Promise.all([
+  const [storedMemberFragments, groupMoments, groupStories, pendingStoryJobs] = await Promise.all([
     repository.findMemberVisibleFragments(groupId, session.user.id),
     repository.listMoments(groupId),
     storyRepository.listStories(groupId),
     storyRepository.listPendingStoryJobs(groupId, session.user.id),
   ]);
+  const memberFragments = await enqueueExistingGroupPostsForAnalysis(database, storedMemberFragments);
   const analysisRecords = await new MongoFragmentAnalysisRepository(database).findMany(
     groupId,
     memberFragments

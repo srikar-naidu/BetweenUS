@@ -105,10 +105,20 @@ export function FragmentPrivacyControls({
             </select>
           </label>
           {allowAiProcessing && (
-            <label className="consent-control">
-              <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-              Allow AI processing
-            </label>
+            <div>
+              <p className="privacy-status">
+                {consent
+                  ? "Gemma analysis is enabled for this post."
+                  : "Gemma analysis is paused for this post."}
+              </p>
+              <button
+                className="text-button"
+                type="button"
+                onClick={() => setConsent((current) => !current)}
+              >
+                {consent ? "Pause Gemma analysis" : "Resume Gemma analysis"}
+              </button>
+            </div>
           )}
         </>
       )}

@@ -45,7 +45,6 @@ export function FragmentComposer({
   const [textContent, setTextContent] = useState("");
   const [mediaFile, setMediaFile] = useState<File | null>(null);
   const [caption, setCaption] = useState("");
-  const [aiProcessingConsent, setAiProcessingConsent] = useState(false);
   const [transcriptionConsent, setTranscriptionConsent] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -53,15 +52,9 @@ export function FragmentComposer({
   const idempotencyKey = useRef<string | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!mediaFile) {
-      setPreviewUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(mediaFile);
-    setPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [mediaFile]);
+  useEffect(() => () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
 
   function openComposer() {
     setIsOpen(true);
@@ -71,9 +64,9 @@ export function FragmentComposer({
   function selectPostType(type: PostType) {
     setPostType(type);
     setMediaFile(null);
+    setPreviewUrl(null);
     setCaption("");
     setTextContent("");
-    setAiProcessingConsent(false);
     setTranscriptionConsent(false);
     idempotencyKey.current = null;
     if (fileInput.current) fileInput.current.value = "";
@@ -122,7 +115,6 @@ export function FragmentComposer({
             capturedAt: capturedAtIso,
             capturedTimeZone,
             visibility: "group",
-            aiProcessingConsent,
           }),
         });
       } else if (postType === "audio" && mediaFile) {
@@ -134,7 +126,6 @@ export function FragmentComposer({
             "X-Captured-At": capturedAtIso,
             "X-Captured-Time-Zone": capturedTimeZone,
             "X-Transcription-Consent": String(transcriptionConsent),
-            "X-AI-Processing-Consent": "false",
             "X-Fragment-Caption": encodeURIComponent(caption),
           },
           body: mediaFile,
@@ -148,7 +139,6 @@ export function FragmentComposer({
             "X-Captured-At": capturedAtIso,
             "X-Captured-Time-Zone": capturedTimeZone,
             "X-Fragment-Caption": encodeURIComponent(caption),
-            "X-AI-Processing-Consent": String(aiProcessingConsent),
           },
           body: mediaFile,
         });
@@ -159,24 +149,20 @@ export function FragmentComposer({
       if (!response.ok) throw new Error(await readError(response));
       const result = await response.json() as {
         fragment: GroupFragmentView;
-        processingStatus?: string | null;
         transcriptionStatus?: string;
-        manualReason?: string | null;
       };
       onCreated(result.fragment);
       setMessage(
         postType === "audio"
           ? result.transcriptionStatus === "transcribing"
             ? "Audio posted to the group. Transcription is processing; review it before Gemma can analyze the transcript."
-            : "Audio posted to the group. Review or enter a transcript before choosing Gemma analysis."
-          : aiProcessingConsent
-            ? `${postType === "text" ? "Text" : postType === "image" ? "Photo" : "Video"} posted. Gemma processing is ${result.processingStatus === "queued" ? "queued" : "not available yet"}.`
-            : "Posted to the group. AI classification is off.",
+            : "Audio posted to the group. Review or enter a transcript before Gemma analyzes it."
+          : "Posted to the group. Gemma's observations will appear with the post when ready.",
       );
       setTextContent("");
       setMediaFile(null);
+      setPreviewUrl(null);
       setCaption("");
-      setAiProcessingConsent(false);
       setTranscriptionConsent(false);
       idempotencyKey.current = null;
       if (fileInput.current) fileInput.current.value = "";
@@ -251,8 +237,9 @@ export function FragmentComposer({
                       }
                       required
                       onChange={(event) => {
-                        setMediaFile(event.target.files?.[0] ?? null);
-                        setAiProcessingConsent(false);
+                        const selectedFile = event.target.files?.[0] ?? null;
+                        setMediaFile(selectedFile);
+                        setPreviewUrl(selectedFile ? URL.createObjectURL(selectedFile) : null);
                         idempotencyKey.current = null;
                         setMessage(null);
                       }}
@@ -321,8 +308,9 @@ export function FragmentComposer({
                         Send audio to ElevenLabs for transcription (optional)
                       </label>
                       <p className="privacy-status">
-                        Audio itself is never sent to Gemma. Review the transcript first; you can opt in
-                        to Gemma analysis when you approve that text.
+                        Raw audio is not sent to Gemma through the current Ollama runtime. After you review
+                        the transcript, Gemma automatically analyzes the approved text. ElevenLabs
+                        transcription is separately optional.
                       </p>
                     </>
                   )}
@@ -341,19 +329,11 @@ export function FragmentComposer({
                   }}
                 />
               </label>
-              {postType !== "audio" && (
-                <label className="consent-control">
-                  <input
-                    type="checkbox"
-                    checked={aiProcessingConsent}
-                    onChange={(event) => {
-                      setAiProcessingConsent(event.target.checked);
-                      idempotencyKey.current = null;
-                    }}
-                  />
-                  Allow Gemma to classify this post
-                </label>
-              )}
+              <p className="privacy-status">
+                Gemma automatically analyzes group posts to find evidence-backed observations. Text,
+                selected photos, and up to six sampled video frames are processed by the internal Gemma
+                runtime; raw audio is not. Voice transcripts are analyzed only after you review them.
+              </p>
               <p className="post-audience-note">This will be visible to everyone in this group.</p>
               <div className="post-actions">
                 <button className="primary-button" type="submit" disabled={isSubmitting}>

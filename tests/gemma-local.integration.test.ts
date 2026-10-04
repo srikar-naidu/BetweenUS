@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import {
   createGemmaService,
@@ -170,6 +171,52 @@ test("duplicate image media reuses its validated observation without inference",
   assert.equal(second.sourceContentSha256, first.sourceContentSha256);
 });
 
+test("visual output that fails evidence validation gets one constrained correction attempt", async () => {
+  const fragment = imageFragment();
+  const makeOutput = (value: string) => ({
+    fragment_id: fragment.id,
+    summary: "",
+    observed_facts: [{
+      type: "object",
+      value,
+      confidence: 0.6,
+      evidence: {
+        fragment_id: fragment.id,
+        modality: "image",
+        locator: "whole_image",
+        evidence: "A cup sits on a table.",
+      },
+    }],
+    people: [],
+    entities: [value],
+    location_hint: null,
+    activity_hint: null,
+    tone_hint: null,
+    confidence: 0.6,
+    uncertainty: { status: "possible", reason: "The visible object is uncertain." },
+    evidence_fragment_ids: [fragment.id],
+  });
+  const tasks: string[] = [];
+  const outputs = [makeOutput("red mug"), makeOutput("cup")];
+  const provider: FragmentAnalysisGenerator = {
+    modelVersion: "gemma4:e2b-test",
+    async generateStructured(input) {
+      tasks.push(input.task);
+      const output = outputs.shift();
+      assert.ok(output);
+      return output;
+    },
+  };
+
+  const analysis = await generateFragmentAnalysis(fragment, provider, {
+    images: [new Uint8Array([1, 2, 3])],
+    evidenceLocators: ["whole_image"],
+  });
+
+  assert.deepEqual(tasks, ["analyze_visual_fragment", "repair_visual_fragment_observations"]);
+  assert.deepEqual(analysis.observedFacts.map((fact) => fact.value), ["cup"]);
+});
+
 test("local Gemma processes a fragment into a validated observation", {
   skip: process.env.RUN_GEMMA_INTEGRATION !== "true",
 }, async () => {
@@ -190,5 +237,45 @@ test("local Gemma processes a fragment into a validated observation", {
   for (const fact of observation.observedFacts) {
     assert.equal(fact.evidence.fragmentId, fragmentId);
     assert.ok(fact.evidence.evidence.includes(fact.value));
+  }
+});
+
+test("local Gemma analyzes an image into grounded observations", {
+  skip: process.env.RUN_GEMMA_VISION_INTEGRATION !== "true" ||
+    !process.env.GEMMA_TEST_IMAGE,
+}, async () => {
+  const imageFragment = {
+    ...textFragment(),
+    id: `${fragmentId}-image`,
+    type: "image" as const,
+    source: "upload" as const,
+    storageUri: "group-media://integration-test-image",
+    textContent: null,
+    checksumSha256: "a".repeat(64),
+    metadata: { mimeType: "image/jpeg" },
+  };
+  const model = process.env.GEMMA_MODEL ?? "gemma4:e2b";
+  const service = createGemmaService({
+    NODE_ENV: "test",
+    GEMMA_RUNTIME: "local",
+    GEMMA_MODEL: model,
+    OLLAMA_HOST: process.env.OLLAMA_HOST ?? "http://localhost:11434",
+    GEMMA_TIMEOUT_MS: process.env.GEMMA_TIMEOUT_MS ?? "300000",
+  });
+  const bytes = await readFile(process.env.GEMMA_TEST_IMAGE!);
+  const observation = await generateFragmentAnalysis(imageFragment, service, {
+    images: [bytes],
+    evidenceLocators: ["whole_image"],
+  });
+
+  assert.equal(observation.fragmentId, imageFragment.id);
+  assert.equal(observation.modelVersion, model);
+  assert.ok(observation.confidence <= 0.7);
+  assert.ok(["possible", "unknown"].includes(observation.uncertainty.status));
+  for (const fact of observation.observedFacts) {
+    assert.equal(fact.evidence.fragmentId, imageFragment.id);
+    assert.equal(fact.evidence.modality, "image");
+    assert.equal(fact.evidence.locator, "whole_image");
+    assert.ok(fact.evidence.evidence.toLowerCase().includes(fact.value.toLowerCase()));
   }
 });
