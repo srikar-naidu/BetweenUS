@@ -201,6 +201,8 @@ The project can continue on local Gemma and synthetic demo data while these acco
 
 This is an MVP experiment deliverable, not a production dependency.
 
+**Current implementation status:** A reproducible, fully synthetic, event-disjoint benchmark now compares the existing hybrid candidate retriever against a lexical/time baseline (`npm run evaluate:phase7`). It includes 60 labeled candidate pairs across 12 independent scenarios, with development and held-out scenarios, same-event positives, hard negatives, insufficient-evidence cases, and synthetic transcript text. The held-out fixture currently reports hybrid precision@1 1.00, recall@1 0.50, recall@3 1.00, versus lexical/time precision@1 0.00, recall@1 0.00, recall@3 0.50. These are fixture sanity metrics only: the small templated set is not representative and the comparison does not test model inference, pairwise grouping decisions, evidence validation, or uncertainty. It does not call Gemma or Tinker and does not represent image/video performance. Tinker training and model-to-model evaluation remain blocked on operator verification of account eligibility, model catalog/compatibility, data terms, retention, and an explicit spend ceiling; no external calls or credentials were added. This benchmark baseline is for retrieval ranking only, not a measured local Gemma baseline.
+
 - First freeze a Gemma baseline and a labeled evaluation set containing same-event pairs, unrelated-nearby pairs, misleading text, insufficient evidence, and diverse media types.
 - Use synthetic or explicitly de-identified/consented training examples only. Do not upload raw group media, private fragments, names, or live Backboard memories.
 - Check current Tinker catalog and account entitlement. If Gemma 4 is unsupported, choose a supported small instruction model only for a comparison experiment; keep local Gemma as production default.
@@ -210,7 +212,7 @@ This is an MVP experiment deliverable, not a production dependency.
 - Compare the Tinker checkpoint on a held-out set with the Gemma baseline. Track pairwise grouping precision/recall, false merges, evidence-ID validity, uncertainty behavior, latency, and spend.
 - Adopt the Tinker model in production only if it passes a pre-agreed improvement threshold, does not worsen false merges or hallucination/evidence failures, has a compatible inference route, fits privacy requirements, and is cheaper/valuable within the credit cap. Otherwise publish the experiment result and leave Gemma as the runtime model.
 
-**Exit gate:** reproducible baseline-vs-Tinker report and an explicit adopt/defer decision. Tinker spend never exceeds the approved cap.
+**Exit gate:** reproducible Gemma-vs-Tinker model report and an explicit adopt/defer decision. Tinker spend never exceeds the approved cap. The current local synthetic ranking comparison is preparation only and does not pass this gate.
 
 ### Phase 8: The expressive product UI
 
