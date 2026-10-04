@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { FragmentVisibility } from "@/lib/domain/memory";
+import { MAX_IMAGE_FILE_BYTES, MAX_VIDEO_FILE_BYTES } from "@/lib/ingestion/media-validation";
 import type { GroupFragmentView } from "@/components/group-detail";
 
 function localDateTimeValue(): string {
@@ -32,6 +33,12 @@ export function FragmentComposer({
   const [transcriptionConsent, setTranscriptionConsent] = useState(false);
   const [voiceSubmitting, setVoiceSubmitting] = useState(false);
   const [voiceMessage, setVoiceMessage] = useState<string | null>(null);
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const mediaFileInput = useRef<HTMLInputElement>(null);
+  const [mediaCaption, setMediaCaption] = useState("");
+  const [mediaVisibility, setMediaVisibility] = useState<FragmentVisibility>("private");
+  const [mediaSubmitting, setMediaSubmitting] = useState(false);
+  const [mediaMessage, setMediaMessage] = useState<string | null>(null);
   const [capturedAt, setCapturedAt] = useState(localDateTimeValue);
   const [visibility, setVisibility] = useState<FragmentVisibility>("private");
   const [aiProcessingConsent, setAiProcessingConsent] = useState(false);
@@ -39,6 +46,7 @@ export function FragmentComposer({
   const [message, setMessage] = useState<string | null>(null);
   const idempotencyKey = useRef<string | null>(null);
   const voiceIdempotencyKey = useRef<string | null>(null);
+  const mediaIdempotencyKey = useRef<string | null>(null);
 
   async function submitText(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -131,6 +139,51 @@ export function FragmentComposer({
     }
   }
 
+  async function submitMedia(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!mediaFile) {
+      setMediaMessage("Choose a photo or video first.");
+      return;
+    }
+    const isVideo = mediaFile.type.startsWith("video/");
+    const maximumBytes = isVideo ? MAX_VIDEO_FILE_BYTES : MAX_IMAGE_FILE_BYTES;
+    if (mediaFile.size > maximumBytes) {
+      setMediaMessage(isVideo ? "Videos must be smaller than 25 MB." : "Photos must be smaller than 12 MB.");
+      return;
+    }
+    setMediaSubmitting(true);
+    setMediaMessage(null);
+    mediaIdempotencyKey.current ??= crypto.randomUUID();
+    try {
+      const response = await fetch(`/api/groups/${groupId}/media`, {
+        method: "POST",
+        headers: {
+          "Content-Type": mediaFile.type,
+          "Idempotency-Key": mediaIdempotencyKey.current,
+          "X-Captured-At": new Date(capturedAt).toISOString(),
+          "X-Captured-Time-Zone": Intl.DateTimeFormat().resolvedOptions().timeZone,
+          "X-Fragment-Visibility": mediaVisibility,
+          "X-Fragment-Caption": encodeURIComponent(mediaCaption),
+        },
+        body: mediaFile,
+      });
+      if (!response.ok) throw new Error(await readError(response));
+      const result = await response.json() as { fragment: GroupFragmentView };
+      onCreated(result.fragment);
+      setMediaFile(null);
+      if (mediaFileInput.current) mediaFileInput.current.value = "";
+      setMediaCaption("");
+      mediaIdempotencyKey.current = null;
+      setMediaMessage(
+        `${isVideo ? "Video" : "Photo"} saved. It is not sent to AI and is only visible according to your privacy setting.`,
+      );
+    } catch (error) {
+      setMediaMessage(error instanceof Error ? error.message : "Photo or video could not be saved.");
+    } finally {
+      setMediaSubmitting(false);
+    }
+  }
+
   return (
     <section className="fragment-composer" id="add-fragment" aria-labelledby="fragment-composer-title">
       <div className="section-head">
@@ -148,6 +201,7 @@ export function FragmentComposer({
             setCapturedAt(event.target.value);
             idempotencyKey.current = null;
             voiceIdempotencyKey.current = null;
+            mediaIdempotencyKey.current = null;
           }} />
         </label>
         <label>
@@ -166,6 +220,63 @@ export function FragmentComposer({
           {isSubmitting ? "Saving…" : "Save text fragment"}
         </button>
         {message && <p className="privacy-status" role="status">{message}</p>}
+      </form>
+      <form className="fragment-composer-form media-composer-form" onSubmit={(event) => void submitMedia(event)}>
+        <div className="media-composer-heading">
+          <div>
+            <h3>Share a photo or video</h3>
+            <p>Photos: JPEG, PNG, or WebP, up to 12 MB. Videos: MP4 or WebM, up to 25 MB.</p>
+          </div>
+          <span className="media-composer-mark" aria-hidden="true">✳</span>
+        </div>
+        <label>
+          Choose a photo or short video
+          <input
+            ref={mediaFileInput}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
+            required
+            onChange={(event) => {
+              setMediaFile(event.target.files?.[0] ?? null);
+              mediaIdempotencyKey.current = null;
+              setMediaMessage(null);
+            }}
+          />
+        </label>
+        {mediaFile && <p className="media-file-name" role="status">{mediaFile.name}</p>}
+        <label>
+          Caption <span>(optional)</span>
+          <textarea
+            value={mediaCaption}
+            maxLength={1_000}
+            placeholder="What do you want your friends to remember about this?"
+            onChange={(event) => {
+              setMediaCaption(event.target.value);
+              mediaIdempotencyKey.current = null;
+            }}
+          />
+        </label>
+        <label>
+          Who can see this?
+          <select
+            value={mediaVisibility}
+            onChange={(event) => {
+              setMediaVisibility(event.target.value as FragmentVisibility);
+              mediaIdempotencyKey.current = null;
+            }}
+          >
+            <option value="private">Only me</option>
+            <option value="group">Everyone in this group</option>
+            <option value="restricted">Restricted</option>
+          </select>
+        </label>
+        <p className="privacy-status media-privacy-note">
+          Starts private. You choose when to share it. Photo and video posts are not processed by AI.
+        </p>
+        <button className="secondary-button" type="submit" disabled={mediaSubmitting || !mediaFile}>
+          {mediaSubmitting ? "Uploading…" : "Post photo or video"}
+        </button>
+        {mediaMessage && <p className="privacy-status" role="status">{mediaMessage}</p>}
       </form>
       <form className="fragment-composer-form voice-composer-form" onSubmit={submitVoice}>
         <label>

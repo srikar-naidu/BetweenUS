@@ -20,6 +20,7 @@ import {
 import { MAX_VOICE_FILE_BYTES, validateVoiceClip } from "@/lib/ingestion/voice-validation";
 import { MongoVoiceRepository } from "@/lib/repositories/mongodb-voice-repository";
 import { MongoVoiceStorage } from "@/lib/repositories/mongodb-voice-storage";
+import { isManagedGroupMediaStorageUri, MongoGroupMediaStorage } from "@/lib/repositories/mongodb-group-media-storage";
 
 export async function markProcessingJobStarted(input: {
   jobId: string;
@@ -270,6 +271,16 @@ export async function deleteStoredFragment(input: { groupId: string; fragmentId:
   if (fragment.source === "upload" && fragment.type === "voice" && fragment.storageUri) {
     await new MongoVoiceStorage(database).delete(fragment.storageUri);
     await new MongoVoiceRepository(database).deleteTranscript(input.groupId, input.fragmentId);
+  } else if (
+    fragment.source === "upload" &&
+    (fragment.type === "image" || fragment.type === "video") &&
+    fragment.storageUri &&
+    isManagedGroupMediaStorageUri(fragment.storageUri)
+  ) {
+    await new MongoGroupMediaStorage(database).delete(fragment.storageUri, {
+      groupId: input.groupId,
+      fragmentId: input.fragmentId,
+    });
   } else if (fragment.source === "upload" && fragment.storageUri) {
     throw ApplicationFailure.nonRetryable(
       "Legacy media storage is unavailable; remove the object manually",

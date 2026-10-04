@@ -7,10 +7,13 @@ import { hasApprovedTextSource } from "@/lib/domain/memory";
 import { formatCaptureTime } from "@/lib/domain/format-time";
 import { FragmentPrivacyControls } from "@/components/fragment-privacy-controls";
 import { FragmentComposer } from "@/components/fragment-composer";
+import { GroupInvitePanel } from "@/components/group-invite-panel";
 import { VoiceTranscriptReview } from "@/components/voice-transcript-review";
+import Image from "next/image";
 
 export type GroupFragmentView = Omit<Fragment, "storageUri"> & {
   processingJobStatus: "queued" | "running" | "succeeded" | "failed" | "retrying" | null;
+  mediaStorageAvailable?: boolean;
 };
 
 const relationshipLabels: Record<MemberMoment["evidence"][number]["relationship"], string> = {
@@ -269,7 +272,13 @@ export function GroupDetail({
   const [momentJobs, setMomentJobs] = useState<Array<{ jobId: string; fragmentId: string }>>([]);
   const [reconstructionMessage, setReconstructionMessage] = useState<string | null>(null);
   const [legacyMediaCleanupRequired, setLegacyMediaCleanupRequired] = useState(
-    initialFragments.some((fragment) => fragment.source === "upload" && fragment.type !== "voice"),
+    initialFragments.some((fragment) =>
+      fragment.source === "upload" &&
+      fragment.type !== "voice" &&
+      ((fragment.type === "image" || fragment.type === "video")
+        ? fragment.mediaStorageAvailable !== true
+        : true),
+    ),
   );
   const [groupMemoryConfigured, setGroupMemoryConfigured] = useState(false);
   const [groupMemoryEnabled, setGroupMemoryEnabled] = useState(false);
@@ -590,7 +599,15 @@ export function GroupDetail({
           <a href="#fragments">Fragments <span>{fragments.length.toString().padStart(2, "0")}</span></a>
           <a href="#moments">Moments <span>{moments.length.toString().padStart(2, "0")}</span></a>
           <a href="#group-memory">Group memory</a>
+          {(memberRole === "owner" || memberRole === "admin") && (
+            <a href="#invite-people">Invite people</a>
+          )}
         </nav>
+      )}
+      {!groupDeletionPending && (memberRole === "owner" || memberRole === "admin") && (
+        <div id="invite-people" className="group-invite-anchor">
+          <GroupInvitePanel groupId={groupId} groupName={groupName} />
+        </div>
       )}
       {groupDeletionPending ? (
         <p className="setup-message" role="status">{groupDeletionMessage}</p>
@@ -605,7 +622,7 @@ export function GroupDetail({
             />
             {legacyMediaCleanupRequired && (
               <p className="setup-message" role="note">
-                Media uploads are disabled. Previously uploaded media is unavailable here and any remaining bucket objects need manual cleanup.
+                Some older uploaded media is stored in an unsupported legacy location and may need manual cleanup.
               </p>
             )}
             <div className="section-head" id="fragments">
@@ -617,12 +634,53 @@ export function GroupDetail({
                 <article className="group-fragment" key={fragment.id}>
                   <div className="fragment-row">
                     <time className="fragment-time">{formatCaptureTime(fragment.capturedAt)}</time>
-                    <span className={`fragment-kind-chip ${contributorTone(fragment.authorUserId)}`}>{fragment.type === "voice" ? "Voice note" : "Text note"}</span>
+                    <span className={`fragment-kind-chip ${contributorTone(fragment.authorUserId)}`}>
+                      {fragment.type === "voice"
+                        ? "Voice note"
+                        : fragment.type === "image"
+                          ? "Photo"
+                          : fragment.type === "video"
+                            ? "Video"
+                            : "Text note"}
+                    </span>
                     <span className={`visibility-chip visibility-${fragment.visibility}`}>{fragment.visibility === "private" ? "Only me" : fragment.visibility}</span>
                   </div>
                   <p className="fragment-copy">{fragment.textContent ?? fragment.caption ?? (
-                    fragment.type === "voice" ? "Voice note — transcript is private until you approve it." : "Media source is unavailable."
+                    fragment.type === "voice"
+                      ? "Voice note — transcript is private until you approve it."
+                      : fragment.type === "image"
+                        ? "A photo shared with this space."
+                        : fragment.type === "video"
+                          ? "A video shared with this space."
+                          : "Media source is unavailable."
                   )}</p>
+                  {fragment.source === "upload" &&
+                    fragment.mediaStorageAvailable &&
+                    fragment.type === "image" && (
+                    <div className="group-media-preview">
+                      <Image
+                        src={`/api/groups/${groupId}/fragments/${fragment.id}/media`}
+                        alt={fragment.caption || "Photo shared to this group"}
+                        width={960}
+                        height={720}
+                        unoptimized
+                        loading="lazy"
+                      />
+                    </div>
+                  )}
+                  {fragment.source === "upload" &&
+                    fragment.mediaStorageAvailable &&
+                    fragment.type === "video" && (
+                    <video
+                      className="group-media-preview group-media-video"
+                      controls
+                      preload="metadata"
+                      playsInline
+                      src={`/api/groups/${groupId}/fragments/${fragment.id}/media`}
+                    >
+                      Your browser does not support video playback.
+                    </video>
+                  )}
                   <p className={`contributor-label ${contributorTone(fragment.authorUserId)}`}>
                     <span aria-hidden="true" />{contributorLabels.get(fragment.authorUserId) ?? "Group member"}
                   </p>
@@ -678,7 +736,13 @@ export function GroupDetail({
                   <FragmentPrivacyControls
                     groupId={groupId}
                     fragmentId={fragment.id}
-                    hasLegacyMedia={fragment.source === "upload" && fragment.type !== "voice"}
+                    hasLegacyMedia={
+                      fragment.source === "upload" &&
+                      fragment.type !== "voice" &&
+                      ((fragment.type !== "image" && fragment.type !== "video") ||
+                        fragment.mediaStorageAvailable !== true)
+                    }
+                    allowAiProcessing={fragment.type !== "image" && fragment.type !== "video"}
                     initialVisibility={fragment.visibility}
                     initialConsent={fragment.aiProcessingConsent}
                     canEditPrivacy={
@@ -709,7 +773,10 @@ export function GroupDetail({
                     }}
                     onDeleted={(fragmentId) => {
                       if (fragments.some((item) =>
-                        item.id === fragmentId && item.source === "upload" && item.type !== "voice",
+                        item.id === fragmentId &&
+                        item.source === "upload" &&
+                        item.type !== "voice" &&
+                        ((item.type !== "image" && item.type !== "video") || !item.mediaStorageAvailable),
                       )) {
                         setLegacyMediaCleanupRequired(true);
                       }

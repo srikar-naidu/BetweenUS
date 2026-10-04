@@ -24,6 +24,10 @@ function normalizeId(value: string | ObjectId): string {
   return value instanceof ObjectId ? value.toHexString() : value;
 }
 
+export function mongoIdVariants(value: string): Array<string | ObjectId> {
+  return ObjectId.isValid(value) ? [new ObjectId(value), value] : [value];
+}
+
 export function membershipAllows(
   membership: GroupMembershipIdentity | null,
   groupId: string,
@@ -54,12 +58,11 @@ export async function listGroupsForUser(headers: Headers) {
   const auth = await getAuth();
   const session = await auth.api.getSession({ headers });
   if (!session) throw new GroupAccessError(401, "Sign in is required");
-  if (!ObjectId.isValid(session.user.id)) return [];
 
   const database = await getMongoDatabase();
   const memberships = await database
     .collection<GroupMembershipIdentity>("group_members")
-    .find({ userId: new ObjectId(session.user.id) })
+    .find({ userId: { $in: mongoIdVariants(session.user.id) } })
     .toArray();
   const roleByGroup = new Map(
     memberships.map((membership) => [normalizeId(membership.organizationId), membership.role as GroupRole]),
@@ -89,18 +92,17 @@ export async function requireGroupMembership(
   const session = await auth.api.getSession({ headers });
   if (!session) throw new GroupAccessError(401, "Sign in is required");
 
-  if (!ObjectId.isValid(groupId) || !ObjectId.isValid(session.user.id)) {
+  if (!ObjectId.isValid(groupId)) {
     throw new GroupAccessError(404, "Group not found");
   }
 
   const database = await getMongoDatabase();
   const groupObjectId = new ObjectId(groupId);
-  const userObjectId = new ObjectId(session.user.id);
   const [group, membership] = await Promise.all([
-    database.collection("groups").findOne({ _id: groupObjectId }),
+    database.collection("groups").findOne({ _id: { $in: mongoIdVariants(groupId) } }),
     database.collection<GroupMembershipIdentity>("group_members").findOne({
-      organizationId: groupObjectId,
-      userId: userObjectId,
+      organizationId: { $in: mongoIdVariants(groupId) },
+      userId: { $in: mongoIdVariants(session.user.id) },
     }),
   ]);
 

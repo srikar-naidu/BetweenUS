@@ -8,6 +8,7 @@ import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
 import { disableGroupBackboard } from "@/lib/pipeline/group-backboard-memory";
 import { MongoVoiceStorage } from "@/lib/repositories/mongodb-voice-storage";
 import { MongoVoiceRepository } from "@/lib/repositories/mongodb-voice-repository";
+import { isManagedGroupMediaStorageUri, MongoGroupMediaStorage } from "@/lib/repositories/mongodb-group-media-storage";
 
 export const runtime = "nodejs";
 
@@ -38,12 +39,27 @@ export async function DELETE(
     await new MongoFragmentAnalysisRepository(database).deleteGroup(groupId);
     const pendingFragments = await ingestionRepository.findPendingGroupFragments(groupId);
     const legacyMediaCleanupRequired = pendingFragments.some(
-      (fragment) => fragment.source === "upload" && fragment.type !== "voice" && fragment.storageUri !== null,
+      (fragment) =>
+        fragment.source === "upload" &&
+        fragment.type !== "voice" &&
+        fragment.storageUri !== null &&
+        !((fragment.type === "image" || fragment.type === "video") &&
+          isManagedGroupMediaStorageUri(fragment.storageUri)),
     );
     for (const fragment of pendingFragments) {
       if (fragment.type === "voice" && fragment.storageUri) {
         await new MongoVoiceStorage(database).delete(fragment.storageUri);
         await new MongoVoiceRepository(database).deleteTranscript(groupId, fragment.id);
+      } else if (
+        (fragment.type === "image" || fragment.type === "video") &&
+        fragment.source === "upload" &&
+        fragment.storageUri &&
+        isManagedGroupMediaStorageUri(fragment.storageUri)
+      ) {
+        await new MongoGroupMediaStorage(database).delete(fragment.storageUri, {
+          groupId,
+          fragmentId: fragment.id,
+        });
       }
       await ingestionRepository.markFragmentDeletionComplete(groupId, fragment.id);
     }

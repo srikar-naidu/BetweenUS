@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition, type FormEvent } from "react";
@@ -45,7 +46,7 @@ export function GroupManager({ initialGroups }: Props) {
         setGroups((current) => [result.group!, ...current]);
         setName("");
         setDescription("");
-        setNotice("Private group created.");
+        router.push(`/groups/${result.group.id}`);
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Could not create group");
       }
@@ -79,7 +80,7 @@ export function GroupManager({ initialGroups }: Props) {
       <section className="groups-column" aria-labelledby="groups-heading">
         <div className="section-head">
           <h2 id="groups-heading">Your groups</h2>
-          <span>{groups.length} active</span>
+          <span>{groups.length} {groups.length === 1 ? "space" : "spaces"}</span>
         </div>
         {groups.length ? (
           <ul className="group-list">
@@ -118,23 +119,95 @@ export function GroupManager({ initialGroups }: Props) {
             ))}
           </ul>
         ) : (
-          <p className="empty-moment">No groups yet. Create one to start a private shared memory.</p>
+          <section className="group-empty-guide" aria-label="What you can share with your group">
+            <div className="group-empty-copy">
+              <span className="group-guide-kicker">A SHARED SPACE, NOT A PUBLIC FEED</span>
+              <h3>Post the little things that make it your story.</h3>
+              <p>
+                Add a photo, a short video, a quick text, or a voice note. Your group can bring their
+                own little pieces, then see what the memories have in common.
+              </p>
+              <span className="group-format-label">PHOTOS <span aria-hidden="true">+</span> SHORT VIDEOS <span aria-hidden="true">+</span> TEXT <span aria-hidden="true">+</span> VOICE</span>
+            </div>
+            <div className="group-example-posts" aria-label="Example group posts">
+              <article className="group-example-post group-example-post--text">
+                <div className="group-example-byline">
+                  <span className="group-example-avatar">M</span>
+                  <span>MAYA <small>· TODAY, 12:04</small></span>
+                </div>
+                <p>Got there early and saved everyone the sunny table.</p>
+                <span className="group-example-type">A LITTLE TEXT MEMORY</span>
+              </article>
+              <article className="group-example-post group-example-post--voice">
+                <div className="group-example-byline">
+                  <span className="group-example-avatar">A</span>
+                  <span>ARJUN <small>· TODAY, 12:09</small></span>
+                </div>
+                <div className="group-example-wave" aria-hidden="true">
+                  {[12, 21, 16, 29, 18, 25, 12, 31, 19, 27, 14, 22, 11, 28, 17, 24, 12].map((height, index) => (
+                    <span key={index} style={{ height }} />
+                  ))}
+                </div>
+                <span className="group-example-type">A 14-SECOND VOICE NOTE</span>
+              </article>
+              <article className="group-example-post group-example-post--media">
+                <Image
+                  src="/fragment-food.svg"
+                  alt="Example photo of fries and coffee on a cafeteria table"
+                  width={180}
+                  height={132}
+                />
+                <span className="group-example-type">A PHOTO FROM LUNCH</span>
+              </article>
+              <article className="group-example-post group-example-post--media group-example-post--video">
+                <div className="group-example-video">
+                  <Image
+                    src="/fragment-video.svg"
+                    alt="Example video still of friends celebrating"
+                    width={180}
+                    height={132}
+                  />
+                  <span aria-hidden="true">▶</span>
+                </div>
+                <span className="group-example-type">A SHORT VIDEO CLIP</span>
+              </article>
+            </div>
+            <div className="group-first-steps" aria-label="Getting started">
+              <span><strong>01</strong> Name your space</span>
+              <span><strong>02</strong> Invite your people</span>
+              <span><strong>03</strong> Add a memory</span>
+            </div>
+          </section>
         )}
       </section>
 
       <section className="create-group-panel" aria-labelledby="create-group-heading">
-        <h2 id="create-group-heading">Create a group</h2>
+        <span className="group-guide-kicker">START YOUR CIRCLE</span>
+        <h2 id="create-group-heading">Make it yours.</h2>
+        <p className="create-group-intro">Give your space a name. You can invite friends and post your first memory right after.</p>
         <form onSubmit={createGroup} className="create-group-form">
           <label>
             Group name
-            <input required minLength={2} maxLength={80} value={name} onChange={(event) => setName(event.target.value)} />
+            <input
+              required
+              minLength={2}
+              maxLength={80}
+              placeholder="The Sunday crew"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
           </label>
           <label>
             Description <span>(optional)</span>
-            <textarea maxLength={500} value={description} onChange={(event) => setDescription(event.target.value)} />
+            <textarea
+              maxLength={500}
+              placeholder="Trips, traditions, or the people you want to remember it with."
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+            />
           </label>
           <button className="primary-button" disabled={isPending}>
-            {isPending ? "Working…" : "Create private group"}
+            {isPending ? "Making your space…" : "Create your private space"}
           </button>
         </form>
         <button

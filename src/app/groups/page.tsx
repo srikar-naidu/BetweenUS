@@ -38,9 +38,12 @@ export default async function GroupsPage() {
         <span className="group-label">SIGNED IN / PRIVATE SPACES</span>
       </header>
       <section className="intro" id="groups-content" tabIndex={-1}>
-        <p className="eyebrow">YOUR PRIVATE SPACES</p>
-        <h1>Groups, not a feed.</h1>
-        <p className="lede">Create a space for the people who shared the moment.</p>
+        <p className="eyebrow">YOUR PEOPLE, YOUR PRIVATE SPACE</p>
+        <h1>A little place for your people.</h1>
+        <p className="lede">
+          Share photos, short videos, text notes, and optional voice memories with the people who
+          were there. Invite your circle and piece the day together.
+        </p>
       </section>
       <GroupManager initialGroups={initialGroups} />
     </main>

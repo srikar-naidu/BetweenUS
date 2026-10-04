@@ -75,7 +75,7 @@ Run locally with `npm install`, then `npm run dev`. `npm test`, `npm run typeche
 
 ## Text fragments and processing worker
 
-The current app supports text fragments and short private WAV voice notes. Voice audio is stored in a private MongoDB GridFS bucket; image/video media and object-storage integrations remain disabled. Previously stored objects in any legacy bucket are not deleted by this app and must be cleaned up manually.
+The current app supports text fragments, short private WAV voice notes, private photo uploads (JPEG/PNG/WebP up to 12 MB), and short video uploads (MP4/WebM up to 25 MB). Photo/video media is stored in a private MongoDB GridFS bucket and served only after group membership and fragment visibility checks. Images/videos are not sent to AI or used for Moment reconstruction; members can add text captions and separately contribute eligible text or reviewed voice transcripts. Voice audio uses its own private GridFS bucket. Previously stored objects in any legacy bucket are not deleted by this app and must be cleaned up manually.
 
 Text-fragment analysis is off by default. A contributor must explicitly enable AI processing; only group-visible, consented analyses are indexed in Tiger. Local Gemma analysis and reconstruction run through a separate Temporal worker. For a local Temporal service, set `TEMPORAL_ADDRESS=localhost:7233`, `TEMPORAL_NAMESPACE=default`, and `TEMPORAL_TLS=false`; for Temporal Cloud, use its namespace endpoint/namespace, TLS, and `TEMPORAL_API_KEY`. Start the app with `npm run dev` and the worker in a separate terminal with `npm run worker`. Workflow history contains only opaque group, fragment, job, and requester IDs; workers recheck authorization and fetch authorized text-derived analyses from MongoDB.
 
@@ -111,7 +111,7 @@ The product and architecture planning documents are:
 
 ## What is intentionally excluded from the first build
 
-The MVP does not include image/video uploads, public social features, comment systems, generic AI chat, or polished recap generation. Members can contribute text fragments and optional bounded WAV voice notes; voice transcription is a separate, disabled-by-default opt-in. The system identifies likely shared moments with evidence-backed reasoning.
+The MVP does not include public social features, comment systems, generic AI chat, or polished recap generation. Members can contribute text, private photos, short videos, and optional bounded WAV voice notes. Photo/video AI analysis is not enabled; voice transcription is a separate, disabled-by-default opt-in. The system identifies likely shared moments from eligible text and reviewed voice transcripts with evidence-backed reasoning.
 
 ## Definition of success
 

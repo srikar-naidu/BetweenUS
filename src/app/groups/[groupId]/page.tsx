@@ -8,6 +8,7 @@ import { momentForGroupMember, visibleMomentsForMember } from "@/lib/auth/group-
 import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
+import { isManagedGroupMediaStorageUri } from "@/lib/repositories/mongodb-group-media-storage";
 
 export const dynamic = "force-dynamic";
 
@@ -53,9 +54,13 @@ export default async function GroupPage({
     memberFragments.map((fragment) => fragment.id),
   );
   const moments = visibleMomentsForMember(groupMoments, memberFragments).map(momentForGroupMember);
-  const fragments: GroupFragmentView[] = memberFragments.map(({ storageUri: _storageUri, ...fragment }) => ({
+  const fragments: GroupFragmentView[] = memberFragments.map(({ storageUri, ...fragment }) => ({
     ...fragment,
     processingJobStatus: fragment.aiProcessingConsent ? processingStatuses.get(fragment.id) ?? null : null,
+    mediaStorageAvailable:
+      (fragment.type === "image" || fragment.type === "video") &&
+      typeof storageUri === "string" &&
+      isManagedGroupMediaStorageUri(storageUri),
   }));
 
   return (

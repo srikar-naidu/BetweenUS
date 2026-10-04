@@ -9,6 +9,7 @@ interface Props {
   initialVisibility: FragmentVisibility;
   initialConsent: boolean;
   hasLegacyMedia: boolean;
+  allowAiProcessing: boolean;
   canEditPrivacy: boolean;
   canDelete: boolean;
   onUpdated: (update: {
@@ -27,6 +28,7 @@ export function FragmentPrivacyControls({
   initialVisibility,
   initialConsent,
   hasLegacyMedia,
+  allowAiProcessing,
   canEditPrivacy,
   canDelete,
   onUpdated,
@@ -102,10 +104,12 @@ export function FragmentPrivacyControls({
               <option value="restricted">Restricted</option>
             </select>
           </label>
-          <label className="consent-control">
-            <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
-            Allow AI processing
-          </label>
+          {allowAiProcessing && (
+            <label className="consent-control">
+              <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} />
+              Allow AI processing
+            </label>
+          )}
         </>
       )}
       <div className="privacy-actions">

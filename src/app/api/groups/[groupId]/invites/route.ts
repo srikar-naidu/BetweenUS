@@ -38,10 +38,13 @@ export async function POST(
       body: { organizationId: groupId, email, role: "member" },
     });
     const baseUrl = process.env.BETTER_AUTH_URL;
+    if (!baseUrl) {
+      return Response.json({ error: "The invitation link base URL is not configured" }, { status: 503 });
+    }
     return Response.json(
       {
         invitation: result,
-        inviteUrl: baseUrl ? `${baseUrl.replace(/\/$/, "")}/invite/${result.id}` : null,
+        inviteUrl: new URL(`/invite/${encodeURIComponent(result.id)}`, baseUrl).toString(),
         delivery: "copy_link",
       },
       { status: 201, headers: { "Cache-Control": "no-store" } },

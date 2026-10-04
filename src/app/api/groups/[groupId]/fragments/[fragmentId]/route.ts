@@ -11,6 +11,7 @@ import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
 import { deleteFragmentBackboardMemories } from "@/lib/pipeline/group-backboard-memory";
 import { MongoVoiceStorage } from "@/lib/repositories/mongodb-voice-storage";
 import { MongoVoiceRepository } from "@/lib/repositories/mongodb-voice-repository";
+import { isManagedGroupMediaStorageUri, MongoGroupMediaStorage } from "@/lib/repositories/mongodb-group-media-storage";
 import { hasApprovedTextSource } from "@/lib/domain/memory";
 
 export const runtime = "nodejs";
@@ -50,6 +51,12 @@ export async function PATCH(
     }
     if (previous.type === "voice" && !hasApprovedTextSource(previous)) {
       return Response.json({ error: "Review the transcript before changing voice-note privacy settings" }, { status: 409 });
+    }
+    if (
+      (previous.type === "image" || previous.type === "video") &&
+      input.aiProcessingConsent
+    ) {
+      return Response.json({ error: "AI processing is not available for photo or video posts" }, { status: 400 });
     }
     const visibility = input.visibility as "private" | "group" | "restricted";
     const aiProcessingConsent = input.aiProcessingConsent;
@@ -112,7 +119,8 @@ export async function PATCH(
         processingStatus = "failed";
       }
     }
-    const { storageUri: _storageUri, ...visibleFragment } = fragment;
+    const { storageUri, ...visibleFragment } = fragment;
+    void storageUri;
     return Response.json(
       { fragment: { ...visibleFragment, processingJobStatus: processingStatus }, jobId, workflowId },
       { headers: { "Cache-Control": "no-store" } },
@@ -144,8 +152,16 @@ export async function DELETE(
       return Response.json({ error: "Fragment not found" }, { status: 404 });
     }
     await deleteFragmentBackboardMemories({ database, groupId, fragmentId });
+    const managedGroupMedia =
+      fragment.source === "upload" &&
+      (fragment.type === "image" || fragment.type === "video") &&
+      fragment.storageUri !== null &&
+      isManagedGroupMediaStorageUri(fragment.storageUri);
     const legacyMediaCleanupRequired =
-      fragment.source === "upload" && fragment.type !== "voice" && fragment.storageUri !== null;
+      fragment.source === "upload" &&
+      fragment.type !== "voice" &&
+      fragment.storageUri !== null &&
+      !managedGroupMedia;
     const requested = fragment.deletionState === "pending" ||
       await repository.requestFragmentDeletion({
         groupId,
@@ -157,6 +173,8 @@ export async function DELETE(
     if (fragment.type === "voice" && fragment.storageUri) {
       await new MongoVoiceStorage(database).delete(fragment.storageUri);
       await new MongoVoiceRepository(database).deleteTranscript(groupId, fragmentId);
+    } else if (managedGroupMedia && fragment.storageUri) {
+      await new MongoGroupMediaStorage(database).delete(fragment.storageUri, { groupId, fragmentId });
     }
     if (process.env.TIGER_DATABASE_URL) {
       await new TigerDataFragmentSearch().removeGroupVisibleFragment(groupId, fragmentId);
