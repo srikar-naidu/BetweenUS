@@ -8,6 +8,7 @@ interface Props {
   fragmentId: string;
   initialVisibility: FragmentVisibility;
   initialConsent: boolean;
+  hasLegacyMedia: boolean;
   canEditPrivacy: boolean;
   canDelete: boolean;
   onDeleted: (fragmentId: string) => void;
@@ -18,6 +19,7 @@ export function FragmentPrivacyControls({
   fragmentId,
   initialVisibility,
   initialConsent,
+  hasLegacyMedia,
   canEditPrivacy,
   canDelete,
   onDeleted,
@@ -51,8 +53,13 @@ export function FragmentPrivacyControls({
         method: "DELETE",
       });
       if (response.status === 202) {
+        const result = await response.json() as { legacyMediaCleanupRequired?: boolean };
         onDeleted(fragmentId);
-        setMessage("Deletion requested. Derived data is pending cleanup.");
+        setMessage(
+          result.legacyMediaCleanupRequired || hasLegacyMedia
+            ? "Fragment details were deleted, but its original media file needs manual cleanup from the former storage bucket."
+            : "Fragment deleted.",
+        );
         return;
       }
       setMessage("Could not request deletion.");

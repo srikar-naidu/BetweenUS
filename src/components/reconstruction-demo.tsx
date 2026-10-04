@@ -67,7 +67,7 @@ export function ReconstructionDemo({ initialFragments, initialMoment }: Props) {
       <div>
         <div className="section-head">
           <h2>Fragments</h2>
-          <span>{fragments.length} uploaded</span>
+          <span>{fragments.length} contributed</span>
         </div>
         <div className="fragment-list">
           {fragments.map((fragment) => (

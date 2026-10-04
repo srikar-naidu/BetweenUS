@@ -6,7 +6,6 @@ import type { Fragment, Moment } from "@/lib/domain/memory";
 import { formatCaptureTime } from "@/lib/domain/format-time";
 import { FragmentPrivacyControls } from "@/components/fragment-privacy-controls";
 import { FragmentComposer } from "@/components/fragment-composer";
-import { FragmentMediaPreview } from "@/components/fragment-media-preview";
 
 export type GroupFragmentView = Omit<Fragment, "storageUri"> & {
   processingJobStatus: "queued" | "running" | "succeeded" | "failed" | "retrying" | null;
@@ -29,13 +28,19 @@ export function GroupDetail({
 }) {
   const [fragments, setFragments] = useState(initialFragments);
   const [groupDeletionPending, setGroupDeletionPending] = useState(false);
+  const [groupDeletionMessage, setGroupDeletionMessage] = useState<string | null>(null);
+  const [legacyMediaCleanupRequired, setLegacyMediaCleanupRequired] = useState(
+    initialFragments.some((fragment) => fragment.source === "upload"),
+  );
   const captionsById = new Map(fragments.map((fragment) => [fragment.id, fragment.caption]));
 
   useEffect(() => {
     const activeFragments = fragments.filter((fragment) =>
-      fragment.processingJobStatus === "queued" ||
-      fragment.processingJobStatus === "running" ||
-      fragment.processingJobStatus === "retrying",
+      fragment.source !== "upload" && (
+        fragment.processingJobStatus === "queued" ||
+        fragment.processingJobStatus === "running" ||
+        fragment.processingJobStatus === "retrying"
+      ),
     );
     if (!activeFragments.length) return;
     let cancelled = false;
@@ -70,8 +75,16 @@ export function GroupDetail({
 
   function requestGroupDeletion() {
     if (!window.confirm("Mark this group for deletion and block further access?")) return;
-    void fetch(`/api/groups/${groupId}`, { method: "DELETE" }).then((response) => {
-      if (response.status === 202) setGroupDeletionPending(true);
+    void fetch(`/api/groups/${groupId}`, { method: "DELETE" }).then(async (response) => {
+      if (response.status === 202) {
+        const result = await response.json() as { legacyMediaCleanupRequired?: boolean };
+        setGroupDeletionMessage(
+          result.legacyMediaCleanupRequired
+            ? "Group access is disabled. Original media files from previous uploads still need manual cleanup from the former storage bucket."
+            : "Group deletion is pending cleanup. Members can no longer access this space.",
+        );
+        setGroupDeletionPending(true);
+      }
     });
   }
 
@@ -101,7 +114,7 @@ export function GroupDetail({
         <h1>{groupName}</h1>
       </section>
       {groupDeletionPending ? (
-        <p className="setup-message" role="status">Group deletion is pending cleanup. Members can no longer access this space.</p>
+        <p className="setup-message" role="status">{groupDeletionMessage}</p>
       ) : (
         <section className="group-detail-grid">
           <div>
@@ -111,6 +124,11 @@ export function GroupDetail({
                 setFragments((current) => [fragment, ...current.filter((item) => item.id !== fragment.id)])
               }
             />
+            {legacyMediaCleanupRequired && (
+              <p className="setup-message" role="note">
+                Media uploads are disabled. Previously uploaded media is unavailable here and any remaining bucket objects need manual cleanup.
+              </p>
+            )}
             <div className="section-head"><h2>Fragments</h2><span>{fragments.length} visible to you</span></div>
             <div className="fragment-list">
               {fragments.map((fragment) => (
@@ -120,12 +138,11 @@ export function GroupDetail({
                     <span>{fragment.type}</span>
                     <span>{fragment.visibility}</span>
                   </div>
-                  <p>{fragment.textContent ?? fragment.caption ?? "No caption"}</p>
-                  <FragmentMediaPreview groupId={groupId} fragment={fragment} />
+                  <p>{fragment.textContent ?? fragment.caption ?? "Media source is unavailable."}</p>
                   {fragment.processingJobStatus && (
                     <p className="fragment-processing-status" role="status">Processing: {fragment.processingJobStatus}</p>
                   )}
-                  {fragment.processingJobStatus === "failed" && (
+                  {fragment.processingJobStatus === "failed" && fragment.source !== "upload" && (
                     <button className="text-button" type="button" onClick={() => void retryProcessing(fragment)}>
                       Retry processing
                     </button>
@@ -133,6 +150,7 @@ export function GroupDetail({
                   <FragmentPrivacyControls
                     groupId={groupId}
                     fragmentId={fragment.id}
+                    hasLegacyMedia={fragment.source === "upload"}
                     initialVisibility={fragment.visibility}
                     initialConsent={fragment.aiProcessingConsent}
                     canEditPrivacy={fragment.authorUserId === currentUserId}
@@ -140,9 +158,12 @@ export function GroupDetail({
                       fragment.authorUserId === currentUserId ||
                       ((memberRole === "owner" || memberRole === "admin") && fragment.visibility === "group")
                     }
-                    onDeleted={(fragmentId) =>
-                      setFragments((current) => current.filter((item) => item.id !== fragmentId))
-                    }
+                    onDeleted={(fragmentId) => {
+                      if (fragments.some((item) => item.id === fragmentId && item.source === "upload")) {
+                        setLegacyMediaCleanupRequired(true);
+                      }
+                      setFragments((current) => current.filter((item) => item.id !== fragmentId));
+                    }}
                   />
                 </article>
               ))}

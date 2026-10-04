@@ -92,7 +92,7 @@ For convergence, packets include the current hypothesis version, prior evidence 
 
 ## Memory layers
 
-1. **Source memory:** private R2 bytes and Mongo Fragment metadata. Exact source, author, consent, capture timezone, checksum, and deletion state stay linked.
+1. **Source memory:** Mongo Fragment text and metadata. Exact source, author, consent, capture timezone, and deletion state stay linked; media upload is disabled.
 2. **Observation memory:** structured, uncertain claims in MongoDB tied to one or more source IDs and model versions.
 3. **Episodic memory:** competing Moment hypotheses, evidence relations, confirmations/corrections, and Stories in MongoDB.
 4. **Retrieval memory:** group-visible derived Tiger projections that can be deleted/rebuilt from authorized MongoDB state.
@@ -124,4 +124,4 @@ Cache only versioned derived outputs such as an Observation or retrieval result.
 
 ## Current implementation boundary
 
-The current production code can ingest private media/text, record provenance and processing jobs, and enforces retrieval/evidence/visibility boundaries in the existing demo. The full multimodal Observation schema, Mongo graph expansion, Tiger semantic vectors, Backboard context, TabPFN scoring, Mastra orchestration, correction-trained Tinker loop, and voice narration remain design targets, not active capabilities. Do not expose UI or telemetry claiming otherwise.
+The current production code can ingest private text, record provenance and processing jobs, and enforce retrieval/evidence/visibility boundaries in the existing demo. Media upload/retrieval is disabled; legacy objects in a former bucket require manual cleanup. The full multimodal Observation schema, Mongo graph expansion, Tiger semantic vectors, Backboard context, TabPFN scoring, Mastra orchestration, correction-trained Tinker loop, and voice narration remain design targets, not active capabilities. Do not expose UI or telemetry claiming otherwise.

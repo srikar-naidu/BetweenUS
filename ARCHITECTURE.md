@@ -14,7 +14,7 @@ Fragment -> Observation -> structured memory graph -> temporal/semantic retrieva
 
 ## Memory objects
 
-- **Fragment:** uploaded media or text with author, group, capture time/timezone, visibility, consent, source, checksum, and deletion state.
+- **Fragment:** a text contribution with author, group, capture time/timezone, visibility, consent, source, and deletion state. Historical media metadata may remain in the database, but media is not currently supported.
 - **Observation:** uncertain, versioned claims extracted from one Fragment. Every claim records its source fragment, extractor/model version, provenance, and whether it is directly observed or inferred.
 - **Moment hypothesis:** a proposed event with evidence links, competing interpretations, uncertainty, and a revision history. It remains provisional until members confirm it.
 - **Story:** a longer-lived relationship among confirmed or sufficiently supported Moments, with provenance back to those Moments and their Fragments.
@@ -26,7 +26,6 @@ Fragment -> Observation -> structured memory graph -> temporal/semantic retrieva
 ```mermaid
 flowchart LR
     U[Group member] --> AUTH[Next.js API + Better Auth]
-    AUTH --> R2[Private R2 objects]
     AUTH --> MDB[(MongoDB canonical graph + jobs)]
     AUTH --> T[Temporal ProcessFragmentWorkflow]
     T --> W[Node worker]
@@ -59,9 +58,8 @@ flowchart LR
 
 | System | Owns | Explicit boundary and current status |
 |---|---|---|
-| Next.js + Better Auth | Authenticated UI/API, group membership checks, upload authorization, review/correction actions | Server-side authorization is authoritative; never trust client-supplied group membership. |
-| MongoDB Atlas | Canonical Users, Groups, memberships, Fragments, Observations, Moments, Stories, Entities, evidence, Corrections, provenance, upload reservations, and ProcessingJobs | Structured graph/state source of truth. Provider IDs are references, not canonical memory. |
-| Private Cloudflare R2 | Original media bytes and derived narration/audio objects when enabled | Private bucket only; short-lived signed operations; bytes never live on Render's ephemeral disk. SDK path exists; real credentials/bucket remain unverified. |
+| Next.js + Better Auth | Authenticated UI/API, group membership checks, text-fragment submission, review/correction actions | Server-side authorization is authoritative; never trust client-supplied group membership. Media upload and retrieval are disabled. |
+| MongoDB Atlas | Canonical Users, Groups, memberships, Fragments, Observations, Moments, Stories, Entities, evidence, Corrections, provenance, and ProcessingJobs | Structured graph/state source of truth. Provider IDs are references, not canonical memory. |
 | Gemma 4 via local Ollama | Multimodal Observation and bounded cross-fragment investigation | Primary perception/reasoning path. Use schemas and evidence IDs; no generic all-history chatbot. Current adapter is local; the full Observation-to-Moment worker path is still being built. |
 | Tiger Data | Derived, group-scoped time/semantic retrieval projection | MongoDB is authoritative. Current baseline is time plus lexical retrieval; embeddings/semantic ranking require a measured model and migration before being claimed. |
 | Backboard | Durable group semantics: aliases, nicknames, inside jokes, recurring references, and meanings | One assistant per group; explicit, confirmed writes only; never raw/private media or speculative claims. Integration remains gated. |
@@ -78,8 +76,8 @@ flowchart LR
 
 ## Memory ownership and flow
 
-1. The API authorizes a member, validates source bytes/metadata, and persists canonical Fragment plus ProcessingJob records in MongoDB. Media bytes go to private R2.
-2. Temporal starts an idempotent workflow with opaque IDs. Activities retrieve the current authorized Fragment/object from canonical stores.
+1. The API authorizes a member, validates text and capture metadata, and persists the canonical Fragment plus ProcessingJob records in MongoDB.
+2. Temporal starts an idempotent workflow with opaque IDs. Activities retrieve the current authorized Fragment from MongoDB.
 3. Gemma creates a structured, uncertain Observation. Voice transcription is a separate opt-in activity; transcript and speaker/time offsets remain linked evidence.
 4. MongoDB stores observations and graph relationships. Only eligible group-visible projections are indexed in Tiger. Backboard receives a minimal confirmed semantic context, never the structured graph wholesale.
 5. Retrieval combines a bounded time window, semantic/lexical similarity when configured, and explicit MongoDB entity/relationship expansion. Backboard contributes only a few relevant confirmed meanings.
@@ -96,7 +94,7 @@ Do not force ambiguous fragments into one answer. Keep multiple candidate hypoth
 - MongoDB is canonical; Tiger and Backboard are derived and rebuildable. Provider outages cannot erase canonical corrections or block private text capture unless a required durable-processing gate explicitly rejects the operation.
 - External integrations are disabled until account terms, retention, budgets, and consent are verified. No silent paid fallback.
 - Private or restricted fragments never enter group retrieval, Context Packets, provider context, or group Moments by inference.
-- R2 object access is group/visibility/author checked before minting a short-lived URL. Deletion invalidates derived state and removes object bytes before completing provenance cleanup.
+- Text and group metadata are scoped to group/visibility/author checks. Legacy media objects, if any, are not reachable through the app and require manual cleanup from their former storage bucket.
 - Temporal retries only idempotent activities. Workflow inputs/results contain opaque IDs/status, not media, transcripts, prompt bodies, or Context Packets.
 - Sentry failure never blocks product actions. Telemetry is scrubbed before export.
 - If evidence, authorization, storage, or validation is unavailable, fail closed or return `unknown`; do not persist an unsupported Moment.

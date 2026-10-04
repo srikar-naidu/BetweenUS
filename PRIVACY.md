@@ -16,7 +16,7 @@ Rules:
 
 ## Media visibility
 
-Users may upload content that is private to them or visible within a group.
+Media upload and retrieval are currently disabled. Existing media records may remain for compatibility, and any original files in a previously configured bucket require manual cleanup.
 
 The system must enforce:
 
@@ -107,7 +107,7 @@ If the system is uncertain whether a fragment should be used in a shared inferen
 - Tell the uploader that audio leaves the local system for transcription. Send only the selected audio file, not a full ContextPacket or group history.
 - ElevenLabs documents zero-retention mode as enterprise-only; do not assume it is available on a free-credit account.
 - Show the transcript to the author for correction before it enters group-visible retrieval or reconstruction. Do not use voice cloning or TTS in the MVP.
-- If consent, quota, or provider availability is missing, keep voice processing disabled without affecting other uploads.
+- If consent, quota, or provider availability is missing, keep voice processing disabled without affecting text-fragment capture.
 
 ### Tinker
 

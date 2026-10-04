@@ -4,7 +4,6 @@ import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { getTemporalClient, startFragmentWorkflow, TemporalConfigurationError } from "@/lib/processing/temporal-client";
-import { isPrivateObjectStorageConfigured, ObjectStorageConfigurationError } from "@/lib/storage/r2-object-store";
 
 export const runtime = "nodejs";
 
@@ -69,10 +68,15 @@ export async function POST(
     ) {
       return Response.json({ error: "A failed processing job was not found" }, { status: 404 });
     }
-
-    if (job.jobType === "delete_fragment" && !isPrivateObjectStorageConfigured()) {
-      throw new ObjectStorageConfigurationError();
+    if (job.jobType === "ingest" && fragment.source === "upload") {
+      return Response.json({ error: "Media fragment processing is no longer supported" }, { status: 410 });
     }
+    if (job.jobType === "delete_fragment" && fragment.source === "upload" && fragment.storageUri) {
+      return Response.json({
+        error: "Remove the legacy media object manually before retrying fragment cleanup",
+      }, { status: 410 });
+    }
+
     await getTemporalClient();
     const reset = await ingestion.resetFailedProcessingJobForRetry({
       groupId,
@@ -99,9 +103,6 @@ export async function POST(
   } catch (error) {
     if (error instanceof TemporalConfigurationError) {
       return Response.json({ error: "Processing is not configured on this server" }, { status: 503 });
-    }
-    if (error instanceof ObjectStorageConfigurationError) {
-      return Response.json({ error: "Private object storage is not configured" }, { status: 503 });
     }
     return apiErrorResponse(error);
   }

@@ -14,7 +14,7 @@ The pipeline turns independent group Fragments into evidence-backed Moment hypot
 ## Target pipeline
 
 ```text
-Capture -> validate -> private object + Mongo Fragment/ProcessingJob
+Text capture -> validate -> Mongo Fragment/ProcessingJob
   -> Temporal workflow (opaque IDs)
   -> Gemma Observation (or opt-in voice STT -> Observation)
   -> Mongo structured graph + authorized Tiger projection
@@ -25,19 +25,19 @@ Capture -> validate -> private object + Mongo Fragment/ProcessingJob
   -> member confirm/reject/correct -> evaluation example -> gated Tinker study
 ```
 
-This is the intended architecture, not a claim that every integration is currently active. The current app has a local Gemma demo, private-by-default Phase 1 boundaries, Phase 2 upload/job code, and a Temporal worker skeleton. A real R2 bucket and Temporal service still require configuration and a live end-to-end test.
+This is the intended architecture, not a claim that every integration is currently active. The current app accepts text fragments only; media upload/retrieval and object storage have been removed. It has private-by-default access boundaries, a local Gemma demo, and a Temporal worker skeleton.
 
 ## 1. Ingestion and provenance
 
-The authenticated API binds each submission to the current user and requested group. It validates actual file signatures, allowed media type, exact size, MP4 duration, capture timestamp/timezone, caption/text limits, visibility, and consent. It creates a stable idempotency key, private storage object key, Mongo Fragment, upload reservation, and ProcessingJob.
+The authenticated API binds each text submission to the current user and requested group. It validates text length, capture timestamp/timezone, visibility, and consent. It creates a stable idempotency key, Mongo Fragment, and ProcessingJob.
 
-MongoDB stores the canonical Fragment fields: author, group, source, capture time and timezone, MIME type, byte size, checksum, visibility, AI consent and timestamps, processing version/status, storage reference, and deletion state. Raw bytes go only to private object storage. Text notes are canonical Mongo content with no media object. New fragments remain private and AI processing stays off unless the member explicitly opts in.
+MongoDB stores the canonical text Fragment fields: author, group, source, capture time and timezone, visibility, AI consent, processing version/status, and deletion state. New fragments remain private and AI processing stays off unless the member explicitly opts in. Legacy media metadata may remain in MongoDB, but source bytes are unavailable through the app.
 
-The object store and Temporal client are required for media upload. APIs fail closed with a configuration error if either is unavailable; they do not fall back to public storage, Render disk, an in-process queue, or an unmetered provider.
+Media upload and retrieval are disabled. Any pre-existing objects in a former bucket require manual cleanup; text processing uses MongoDB and Temporal only.
 
 ## 2. Observation: Gemma sees
 
-For eligible media, a worker fetches the authorized object by opaque Fragment ID and calls local Gemma with only that one Fragment and the extraction schema. Gemma returns a structured Observation containing, when supported:
+For eligible fragments, a worker calls local Gemma with only authorized text and the extraction schema. Gemma returns a structured Observation containing, when supported:
 
 - visible objects, activity, scene, and text/OCR evidence;
 - location clues and time clues with source offsets/metadata;
@@ -104,10 +104,10 @@ ElevenLabs TTS may narrate only a member-approved/confirmed Moment or Story, fro
 
 ## 10. Durable orchestration and observability
 
-Temporal owns ingestion, observation, retrieval/reconstruction, deletion cleanup, and (later) convergence workflows with idempotent activities, explicit timeouts/retries, and stable workflow IDs. MongoDB owns job status and domain state. Workflow arguments/results contain only opaque IDs and small status values. Activities fetch authorized bytes/context at execution time, persist outputs in MongoDB/Tiger/R2, and return opaque references.
+Temporal owns text ingestion, observation, retrieval/reconstruction, deletion cleanup, and (later) convergence workflows with idempotent activities, explicit timeouts/retries, and stable workflow IDs. MongoDB owns job status and domain state. Workflow arguments/results contain only opaque IDs and small status values. Activities fetch authorized text/context at execution time, persist outputs in MongoDB/Tiger, and return opaque references.
 
 Mastra is not a durable job store. Sentry should trace workflow steps, Gemma calls, retrieval, optional scoring, provider calls, latency, and failures using scrubbed operation names and opaque IDs. Disable request bodies, media, prompts/completions, transcripts, direct identity, session replay, and sensitive span attributes. A telemetry failure must not affect processing.
 
 ## Current demo boundary
 
-The synthetic demo creates a candidate from seeded fragments, applies a bounded time/lexical retrieval, validates cited evidence, requires multiple fragments/authors, and derives uncertainty. It is not the production ingestion workflow and has no user-media access. Phase 2 upload/job code records media and schedules a workflow, but the complete Gemma Observation -> retrieval -> Moment convergence chain remains subsequent work.
+The synthetic demo creates a candidate from seeded fragments, applies a bounded time/lexical retrieval, validates cited evidence, requires multiple fragments/authors, and derives uncertainty. It is not the production ingestion workflow and has no user-media access. Text-fragment ingestion schedules processing jobs, but the complete Gemma Observation -> retrieval -> Moment convergence chain remains subsequent work.

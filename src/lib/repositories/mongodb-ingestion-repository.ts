@@ -1,29 +1,8 @@
-import { randomUUID } from "node:crypto";
 import { ObjectId } from "mongodb";
 import type { Collection, Db, Document } from "mongodb";
-import type { Fragment, FragmentType, FragmentVisibility } from "@/lib/domain/memory";
+import type { Fragment } from "@/lib/domain/memory";
 
-export type UploadReservationStatus = "issued" | "completed" | "rejected";
 export type ProcessingJobStatus = "queued" | "running" | "succeeded" | "failed" | "retrying";
-
-export interface UploadReservation {
-  id: string;
-  groupId: string;
-  authorUserId: string;
-  objectKey: string;
-  type: Extract<FragmentType, "image" | "screenshot" | "video">;
-  contentType: string;
-  expectedSize: number;
-  capturedAt: Date;
-  capturedTimeZone: string;
-  visibility: FragmentVisibility;
-  aiProcessingConsent: boolean;
-  caption: string | null;
-  expiresAt: Date;
-  status: UploadReservationStatus;
-  fragmentId: string | null;
-  createdAt: Date;
-}
 
 export interface ProcessingJob {
   id: string;
@@ -54,12 +33,10 @@ function asRecord<T>(record: StoredRecord<T>): T {
 }
 
 export class MongoIngestionRepository {
-  private readonly uploadSessions: Collection<StoredRecord<UploadReservation>>;
   private readonly processingJobs: Collection<StoredRecord<ProcessingJob>>;
   private readonly fragments: Collection<StoredRecord<Fragment>>;
 
   constructor(private readonly database: Db) {
-    this.uploadSessions = database.collection<StoredRecord<UploadReservation>>("upload_sessions");
     this.processingJobs = database.collection<StoredRecord<ProcessingJob>>("processing_jobs");
     this.fragments = database.collection<StoredRecord<Fragment>>("fragments");
   }
@@ -68,13 +45,11 @@ export class MongoIngestionRepository {
     let pending = ingestionIndexes.get(this.database);
     if (!pending) {
       pending = Promise.all([
-      this.uploadSessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
-      this.uploadSessions.createIndex({ groupId: 1, authorUserId: 1, status: 1 }),
-      this.processingJobs.createIndex(
-        { groupId: 1, fragmentId: 1, jobType: 1, processingVersion: 1 },
-        { unique: true },
-      ),
-      this.processingJobs.createIndex({ status: 1, updatedAt: 1 }),
+        this.processingJobs.createIndex(
+          { groupId: 1, fragmentId: 1, jobType: 1, processingVersion: 1 },
+          { unique: true },
+        ),
+        this.processingJobs.createIndex({ status: 1, updatedAt: 1 }),
       ]).then(() => undefined);
       ingestionIndexes.set(this.database, pending);
     }
@@ -84,78 +59,6 @@ export class MongoIngestionRepository {
       ingestionIndexes.delete(this.database);
       throw error;
     }
-  }
-
-  async createUploadReservation(input: Omit<UploadReservation, "id"> & { id?: string }): Promise<UploadReservation> {
-    await this.ensureIndexes();
-    const reservation: UploadReservation = { ...input, id: input.id ?? randomUUID() };
-    const { id, ...document } = reservation;
-    try {
-      await this.uploadSessions.insertOne({ _id: id, ...document });
-    } catch (error) {
-      if (typeof error !== "object" || error === null || !("code" in error) || error.code !== 11000) {
-        throw error;
-      }
-      const existing = await this.uploadSessions.findOne({
-        _id: id,
-        groupId: reservation.groupId,
-        authorUserId: reservation.authorUserId,
-      });
-      if (!existing) throw error;
-      return asRecord(existing);
-    }
-    return reservation;
-  }
-
-  async findUploadReservation(input: {
-    groupId: string;
-    authorUserId: string;
-    uploadId: string;
-  }): Promise<UploadReservation | null> {
-    await this.ensureIndexes();
-    const record = await this.uploadSessions.findOne({
-        _id: input.uploadId,
-        groupId: input.groupId,
-        authorUserId: input.authorUserId,
-      });
-    return record ? asRecord(record) : null;
-  }
-
-  async completeUploadReservation(input: {
-    groupId: string;
-    authorUserId: string;
-    uploadId: string;
-    fragmentId: string;
-  }): Promise<boolean> {
-    await this.ensureIndexes();
-    const result = await this.uploadSessions.updateOne(
-      {
-        _id: input.uploadId,
-        groupId: input.groupId,
-        authorUserId: input.authorUserId,
-        status: "issued",
-        expiresAt: { $gt: new Date() },
-      },
-      { $set: { status: "completed", fragmentId: input.fragmentId, completedAt: new Date() } },
-    );
-    return result.modifiedCount === 1;
-  }
-
-  async rejectUploadReservation(input: {
-    groupId: string;
-    authorUserId: string;
-    uploadId: string;
-  }): Promise<void> {
-    await this.ensureIndexes();
-    await this.uploadSessions.updateOne(
-      {
-        _id: input.uploadId,
-        groupId: input.groupId,
-        authorUserId: input.authorUserId,
-        status: "issued",
-      },
-      { $set: { status: "rejected", rejectedAt: new Date() } },
-    );
   }
 
   async upsertProcessingJob(input: {
@@ -287,29 +190,16 @@ export class MongoIngestionRepository {
     };
   }
 
-  async findActiveUploadedFragments(groupId: string): Promise<Array<Pick<Fragment, "id" | "groupId" | "source" | "processingVersion">>> {
-    const records = await this.fragments.find({
-      groupId,
-      source: "upload",
-      deletionState: "active",
-    }).project({ _id: 1, groupId: 1, source: 1, processingVersion: 1 }).toArray();
-    return records.map((record) => ({
-      id: String(record._id),
-      groupId: String(record.groupId),
-      source: "upload",
-      processingVersion: typeof record.processingVersion === "string" ? record.processingVersion : "legacy",
-    }));
-  }
-
-  async findPendingGroupFragments(groupId: string): Promise<Array<Pick<Fragment, "id" | "groupId" | "source" | "processingVersion">>> {
+  async findPendingGroupFragments(groupId: string): Promise<Array<Pick<Fragment, "id" | "groupId" | "source" | "processingVersion" | "storageUri">>> {
     const records = await this.fragments.find({ groupId, deletionState: "pending" })
-      .project({ _id: 1, groupId: 1, source: 1, processingVersion: 1 })
+      .project({ _id: 1, groupId: 1, source: 1, processingVersion: 1, storageUri: 1 })
       .toArray();
     return records.map((record) => ({
       id: String(record._id),
       groupId: String(record.groupId),
       source: record.source === "upload" ? "upload" : "legacy",
       processingVersion: typeof record.processingVersion === "string" ? record.processingVersion : "legacy",
+      storageUri: typeof record.storageUri === "string" ? record.storageUri : null,
     }));
   }
 

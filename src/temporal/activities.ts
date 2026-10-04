@@ -2,7 +2,6 @@ import { ApplicationFailure } from "@temporalio/activity";
 import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
-import { deletePrivateObject } from "@/lib/storage/r2-object-store";
 
 export async function markProcessingJobStarted(input: {
   jobId: string;
@@ -75,7 +74,10 @@ export async function deleteStoredFragment(input: { groupId: string; fragmentId:
   const fragment = await repository.findFragmentForCleanup(input.groupId, input.fragmentId);
   if (!fragment) return;
   if (fragment.source === "upload" && fragment.storageUri) {
-    await deletePrivateObject(fragment.storageUri);
+    throw ApplicationFailure.nonRetryable(
+      "Legacy media storage is unavailable; remove the object manually",
+      "LegacyMediaCleanupRequired",
+    );
   }
   await repository.markFragmentDeletionComplete(input.groupId, input.fragmentId);
 }

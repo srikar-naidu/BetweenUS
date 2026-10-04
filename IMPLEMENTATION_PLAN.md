@@ -87,7 +87,7 @@ flowchart LR
   OBS -.-> WORKER
 ```
 
-MongoDB is authoritative. Tiger and Backboard are derived/context services that can be rebuilt or reconciled from authorized MongoDB state and provenance records. Backboard service failure must not block normal fragment uploads or erase MongoDB state.
+MongoDB is authoritative. Tiger and Backboard are derived/context services that can be rebuilt or reconciled from authorized MongoDB state and provenance records. Backboard service failure must not block normal text-fragment submissions or erase MongoDB state.
 
 ## Implementation phases
 
@@ -95,16 +95,14 @@ MongoDB is authoritative. Tiger and Backboard are derived/context services that 
 
 Do this before consuming provider credits or implementing external integrations.
 
-**Current status: PROJECT-SIDE WORK COMPLETE; OPERATOR EXIT GATE OPEN.** Better Auth + Google OAuth is the identity path; the callback is documented in `README.md`; new fragments default to private with AI processing consent off; local Gemma is the default; the initial screens/tokens exist; and storage, budget, upload, and consent defaults are recorded in `DECISIONS.md` Decision 15. Provider-account facts, live OAuth operation, and historical data-sharing confirmation cannot be established from this repository.
-
-During the latest local check (2026-10-03), required environment variables were present, the Tiger migration applied, and the configured local Gemma model was available. MongoDB returned `ECONNREFUSED`, so Google sign-in and database-backed flows were not verified. No environment values are recorded here.
+**Current status: NOT COMPLETE.** Repository review found the following decisions already represented: Better Auth + Google OAuth is the identity path; Google callback configuration is documented in `README.md`; new fragments default to private with AI processing consent off; local Gemma is the default; and the current home screen/CSS establish an initial screen and token direction. See `DECISIONS.md` Decision 12 for the additional Phase 0 defaults locked during this review.
 
 The following exit-gate items remain unverified and must be completed by an operator with access to the provider accounts before any external provider is enabled or any real personal media is sent:
 
 - Record remaining credits, expiry, permitted use, rate limits, billing behavior, retention, and training terms for Backboard, Tinker, ElevenLabs, Temporal Cloud, and Sentry.
 - Verify Tinker's live supported-model catalog, Gemma compatibility, sampling/checkpoint options, and account billing; until then, Tinker remains disabled and no samples are sent.
 - Configure and test Google OAuth credentials and the `/api/auth/callback/google` callback; the repository's `.env.example` contains blank credential placeholders and does not prove configuration.
-- Create and verify a private Cloudflare R2 bucket and credentials. No production media may be stored on Render's ephemeral disk.
+- Media upload and object storage are disabled in the current implementation. Choose and review a provider before any future media feature is reintroduced.
 - Confirm that no real personal media has already been sent to a third party. The repository cannot establish this historical fact.
 - Before enabling any billable call, implement its feature flag, usage logging, and an explicitly approved non-zero cap; until that approval, the authorized external spend ceiling is $0.
 
@@ -120,13 +118,9 @@ The project can continue on local Gemma and synthetic demo data while these acco
 - Lock fragment size/type limits, visibility defaults, and consent text.
 - Design the key product screens and UI tokens before implementing their final layouts.
 
-**Exit gate:** written decisions for identity, media storage, provider credit caps, data-sharing/retention, and model compatibility. No real personal media has been sent to a third party yet.
+**Exit gate:** written decisions for identity, provider credit caps, data-sharing/retention, and model compatibility. Any future media-storage integration requires a separate decision. No real personal media has been sent to a third party yet.
 
 ### Phase 1: Trust foundation and real group boundaries
-
-**Current status: LOCAL GUARDS IMPLEMENTED; INTEGRATION EXIT GATE NOT MET.** Better Auth/Google, Mongo-backed sessions, group APIs, membership checks, private-by-default visibility, explicit AI consent, deletion-pending records, moment invalidation, Tiger projection removal, and server-side auth configuration validation are implemented. Shared moment/evidence filtering now binds every source fragment to the moment's group and excludes private, non-consented, or inactive fragments. Group API summaries use an explicit allowlist projection so provider assistant IDs are not exposed. Unit tests cover group-scoped Mongo queries, two-group evidence isolation, response projection, and deletion-request provenance.
-
-Remaining work: validate signed-in requests across two real groups at the API boundary and against Mongo/Tiger; test object URL isolation when the Phase 2 object-storage adapter exists; test provider-context isolation when provider integrations exist; implement/verify cleanup of stored media and provider memories when their adapters are introduced; and complete a live OAuth/session check after MongoDB connectivity is restored. The present tests are focused unit/security tests, not the Phase 1 two-group integration exit gate.
 
 - Implement Better Auth Google sign-in, MongoDB-backed sessions, group creation/invites, membership roles, and server-side authorization helpers. Use the Google callback `/api/auth/callback/google` and require verified email for email-bound invitations.
 - Add tests proving users cannot enumerate or retrieve another group's fragments, moments, evidence, or Backboard assistant ID.
@@ -138,19 +132,15 @@ Remaining work: validate signed-in requests across two real groups at the API bo
 
 ### Phase 2: Ingestion, storage, and processing jobs
 
-**Current status: IMPLEMENTED LOCALLY; EXTERNAL INTEGRATION GATE OPEN.** The app now has group-authorized text ingestion, private R2 presigned uploads with server-side byte/type/duration/checksum validation, Mongo upload reservations and idempotent processing-job records, a separate Temporal worker/workflow for ingestion and deletion cleanup, private short-lived download URLs, and visible processing status. The real `.env` currently has no R2 or Temporal variable names, so R2/Temporal connectivity and the upload-survives-restart exit gate have not yet been verified.
+**Current implementation boundary:** Text-fragment creation and processing jobs are implemented. Media upload/retrieval and object storage are disabled; any legacy objects in a former bucket require manual cleanup.
 
-Before calling this phase complete, configure a private R2 bucket and CORS for the app's exact origins, configure a Temporal service and run `npm run worker`, then perform image, screenshot, video, text, retry, restart, and deletion checks through the app.
-
-- Implement private signed uploads for images, screenshots, and short videos; store bytes in the selected private object store and metadata in MongoDB.
 - Add text-fragment creation and capture-time/time-zone handling.
-- Store source, author, group, visibility, consent, MIME type, capture time, checksum, and processing version.
+- Store source, author, group, visibility, consent, capture time, and processing version.
 - Use Temporal as the processing orchestrator: `ProcessFragmentWorkflow` schedules idempotent Node activities for extraction, embedding, candidate search, reconstruction, and deletion cleanup with explicit timeouts/retries.
-- Store only opaque Mongo fragment/job IDs and small status data in Temporal workflow history; activities fetch authorized bytes and context from their canonical stores. Activities persist sensitive outputs in MongoDB/Tiger and return opaque IDs/status, not extracted text, transcripts, prompts, or completions. Never place media or full ContextPackets in workflow inputs/results.
+- Store only opaque Mongo fragment/job IDs and small status data in Temporal workflow history; activities fetch authorized text and context from their canonical stores. Activities persist sensitive outputs in MongoDB/Tiger and return opaque IDs/status, not extracted text, transcripts, prompts, or completions. Never place full ContextPackets in workflow inputs/results.
 - Mirror user-facing processing status, provider references, and final outputs into MongoDB. Do not run a second Mongo polling queue alongside Temporal.
-- Enforce file-size/duration limits and validate MIME types from file content, not only client headers.
 
-**Exit gate:** uploads survive server restarts, duplicate job retries do not create duplicate fragments, and a deletion request removes the source object and marks dependent AI state stale.
+**Exit gate:** text fragments survive server restarts, duplicate job retries do not create duplicate fragments, and deletion marks dependent AI state stale. Reintroducing media requires a separately approved private-storage design and migration plan.
 
 ### Phase 3: Baseline intelligence and temporal/vector retrieval
 

@@ -8,7 +8,7 @@ Most shared-photo products answer: “What did my friends post?”
 
 Between Us answers: “What actually happened between all these fragments?”
 
-Friends rarely document an event completely. One person uploads a photo, another sends a screenshot, someone else records a short video, and another writes a caption like “bro 💀.” Those fragments may belong to the same real-world event, but nobody recorded the full story in one place.
+Friends rarely document an event completely. Different people remember different details, but nobody recorded the full story in one place.
 
 Between Us discovers those relationships, reconstructs the likely moment, and preserves evidence and uncertainty instead of inventing certainty.
 
@@ -26,7 +26,7 @@ The user experience is designed to answer: “We forgot this happened,” not �
 
 ## Core user experience
 
-1. Multiple people upload fragments from the same period.
+1. Multiple people contribute text fragments from the same period.
 2. The system groups likely related fragments.
 3. The AI reasons over only relevant candidate context.
 4. The system surfaces a probable moment with evidence.
@@ -73,13 +73,13 @@ Authentication also requires `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `GOOGLE_CL
 
 Run locally with `npm install`, then `npm run dev`. `npm test`, `npm run typecheck`, and `npm run build` provide the current verification gates.
 
-## Private uploads and processing worker
+## Text fragments and processing worker
 
-Media uploads use Cloudflare R2 S3-compatible API credentials. Configure `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, and `R2_BUCKET` in the local `.env`; keep the bucket private. Configure its CORS policy to allow `PUT`, `GET`, and `HEAD` from `http://localhost:3000` (and the exact deployed app origin), with `Content-Type` as an allowed header. The app signs five-minute uploads and downloads; it does not expose the bucket publicly.
+The current app supports text fragments only. Media upload and retrieval endpoints have been removed, and no object-storage provider is required. Previously stored objects in any legacy bucket are not deleted by this app and must be cleaned up manually.
 
-Processing uses a separate Temporal worker. For a local Temporal service, set `TEMPORAL_ADDRESS=localhost:7233`, `TEMPORAL_NAMESPACE=default`, and `TEMPORAL_TLS=false`; for Temporal Cloud, use its namespace endpoint/namespace, TLS, and `TEMPORAL_API_KEY`. Start the app with `npm run dev` and the worker in a separate terminal with `npm run worker`. The worker receives opaque group, fragment, and job IDs only; it fetches authorized records from MongoDB and media from private R2.
+Text processing uses a separate Temporal worker. For a local Temporal service, set `TEMPORAL_ADDRESS=localhost:7233`, `TEMPORAL_NAMESPACE=default`, and `TEMPORAL_TLS=false`; for Temporal Cloud, use its namespace endpoint/namespace, TLS, and `TEMPORAL_API_KEY`. Start the app with `npm run dev` and the worker in a separate terminal with `npm run worker`. The worker receives opaque group, fragment, and job IDs only and fetches authorized text records from MongoDB.
 
-If R2 or Temporal is not configured, media upload and text-ingestion APIs return a configuration error instead of accepting work that cannot be processed. Do not put R2 or Temporal credentials in `NEXT_PUBLIC_` variables.
+Text ingestion requires the database and processing configuration; it fails with a configuration error rather than accepting work that cannot be processed. Do not put Temporal credentials in `NEXT_PUBLIC_` variables.
 
 
 ## Documentation set
@@ -100,8 +100,8 @@ The product and architecture planning documents are:
 
 ## What is intentionally excluded from the first build
 
-The MVP does not include public social features, comment systems, generic AI chat, or polished recap generation. The first build is scoped to proving that multiple users can upload fragments and that the system can identify likely shared moments with evidence-backed reasoning.
+The MVP does not include media uploads, public social features, comment systems, generic AI chat, or polished recap generation. The first build is scoped to proving that multiple users can contribute text fragments and that the system can identify likely shared moments with evidence-backed reasoning.
 
 ## Definition of success
 
-This project is successful when multiple people independently upload fragments from the same experience and the system can connect them into a shared moment, explain the connection, preserve uncertainty, and surface a meaningful memory without inventing false details.
+This project is successful when multiple people independently contribute fragments from the same experience and the system can connect them into a shared moment, explain the connection, preserve uncertainty, and surface a meaningful memory without inventing false details.

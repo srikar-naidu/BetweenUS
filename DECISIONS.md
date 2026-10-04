@@ -324,17 +324,17 @@ The implementation plan requires account-specific credit, billing, retention, an
 ### Chosen approach
 
 - Keep Better Auth with Google OAuth as the identity path; require verified email for email-bound invitations and use `/api/auth/callback/google`.
-- Use a private Cloudflare R2 bucket as the production media-storage target, accessed only through a server-side storage adapter. Never use public object URLs or Render's ephemeral disk for production media.
+- (Superseded by Decision 16) Use a private R2 bucket as the production media-storage target, accessed only through a server-side storage adapter. Never use public object URLs or Render's ephemeral disk for production media.
 - Set the authorized external-provider spend ceiling to $0 until account balances/terms are checked and a non-zero per-provider cap is explicitly approved. Every billable integration must have a kill-switch feature flag and usage logging before it can be enabled.
 - Keep Backboard, Tinker, ElevenLabs, Temporal Cloud, and Sentry external calls disabled until their account-specific terms, retention, billing, and privacy configuration are verified. Local Gemma and synthetic demo data remain usable.
 - Keep fragment visibility private and AI-processing consent off by default. General AI consent does not authorize external-provider processing; each such use requires provider-specific, informed consent before implementation.
-- Initial ingestion bounds: JPEG/PNG/WebP images and screenshots up to 15 MiB; MP4 video up to 50 MiB and 60 seconds; text up to 10,000 characters. Validate actual content and media duration server-side, not just the supplied MIME type. Voice uploads and transcription remain disabled until the ElevenLabs gate passes; any later voice feature is separately capped and consented.
+- (Media bounds superseded by Decision 16) Initial ingestion bounds: JPEG/PNG/WebP images and screenshots up to 15 MiB; MP4 video up to 50 MiB and 60 seconds; text up to 10,000 characters. Validate actual content and media duration server-side, not just the supplied MIME type. Voice uploads and transcription remain disabled until the ElevenLabs gate passes; any later voice feature is separately capped and consented.
 - Use this consent copy for the initial local-AI flow: "Allow AI processing for group moment suggestions. This fragment stays private unless you separately choose Group visibility. Turning this off excludes it from AI processing." External processing must present a separate provider-specific notice and consent before sending data.
 - Treat the existing home screen and CSS tokens as the initial product-design baseline; refine them as implementation proceeds rather than blocking the trust foundation on a second design pass.
 
 ### Verification still required
 
-Provider balances, expiry, rate limits, billing behavior, live retention/training terms, Tinker model/checkpoint compatibility, OAuth credentials/callback operation, R2 account and bucket setup, and confirmation that no real personal media has already been sent are operator checks. They are intentionally not claimed as complete by this repository decision. Until verified, the $0 spend ceiling and disabled external-call policy remain in force.
+Provider balances, expiry, rate limits, billing behavior, live retention/training terms, Tinker model/checkpoint compatibility, OAuth credentials/callback operation, and confirmation that no real personal media has already been sent are operator checks. They are intentionally not claimed as complete by this repository decision. Until verified, the $0 spend ceiling and disabled external-call policy remain in force.
 
 ### Reason
 
@@ -342,5 +342,22 @@ This makes the decisions that are safe to make from the project context while pr
 
 ### Trade-offs
 
-- Pros: unambiguous privacy and spending defaults; a concrete media-storage target; local development can continue without provider credentials
+- Pros: unambiguous privacy and spending defaults; local development can continue without provider credentials
 - Cons: optional integrations remain unavailable until account checks and explicit caps are recorded
+
+## Decision 16: Disable media uploads and object storage
+
+### Context
+
+The active product uses text fragments only and has no requirement for a third-party media-storage integration.
+
+### Chosen approach
+
+- Remove the R2 integration, credentials, upload/download endpoints, and media-upload UI.
+- Keep text-fragment capture and its existing group privacy controls.
+- Do not configure or call an object-storage provider in the current app.
+- Any objects left in a previously configured bucket require manual cleanup; deleting fragment metadata in the app cannot remove those external bytes.
+
+### Reason
+
+Keep the running product aligned with its current text-only capability and avoid carrying an unnecessary infrastructure dependency.

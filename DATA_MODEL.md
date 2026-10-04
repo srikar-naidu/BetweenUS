@@ -258,7 +258,7 @@ Responsibilities:
 
 ### Ownership
 
-- User owns their personal profile and uploads
+- User owns their personal profile and authored fragments
 - Group owns shared memory state
 - Fragment belongs to a group and an author
 - Moment belongs to a group

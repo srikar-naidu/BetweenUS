@@ -2,22 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { MongoIngestionRepository } from "../src/lib/repositories/mongodb-ingestion-repository";
 import { getTemporalSettings } from "../src/lib/processing/temporal-client";
-import { isPrivateObjectStorageConfigured } from "../src/lib/storage/r2-object-store";
-
-test("R2 storage remains disabled until all private credentials are present", () => {
-  assert.equal(isPrivateObjectStorageConfigured({}), false);
-  assert.equal(isPrivateObjectStorageConfigured({
-    R2_ACCOUNT_ID: "account",
-    R2_ACCESS_KEY_ID: "access",
-    R2_SECRET_ACCESS_KEY: "secret",
-  }), false);
-  assert.equal(isPrivateObjectStorageConfigured({
-    R2_ACCOUNT_ID: "account",
-    R2_ACCESS_KEY_ID: "access",
-    R2_SECRET_ACCESS_KEY: "secret",
-    R2_BUCKET: "between-us-private",
-  }), true);
-});
 
 test("Temporal configuration supports local and Cloud endpoints without logging credentials", () => {
   assert.equal(getTemporalSettings({}), null);
