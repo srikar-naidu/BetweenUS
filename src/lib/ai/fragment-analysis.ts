@@ -274,8 +274,7 @@ export function validateFragmentAnalysisOutput(
       }
     } else if (
       !locator ||
-      !evidenceLocators.includes(locator) ||
-      !evidence.toLocaleLowerCase().includes(value.toLocaleLowerCase())
+      !evidenceLocators.includes(locator)
     ) {
       throw new FragmentAnalysisValidationError("Gemma returned an ungrounded visual observation");
     }
@@ -450,11 +449,9 @@ export async function generateFragmentAnalysis(
   const textSource = fragment.textContent ?? "";
   const visualConstraints = [
     "Describe only observable details. Do not identify people, infer relationships, sensitive traits, or exact locations.",
-    "Every fact must have evidence with this fragment ID, the supplied modality, and a supplied image/frame locator.",
-    "The evidence string must contain the fact value as an exact, case-matching substring. Before returning, check every fact and remove any fact whose value is not literally present in its evidence string.",
+    "Every fact must have evidence with this fragment ID, the supplied modality, a supplied image/frame locator, and a short description of the visible evidence supporting the claim.",
     "Treat visual observations as tentative and never present them as verified facts. Keep confidence at or below 0.7.",
-    "People must exactly repeat values of person facts; entities must exactly repeat values of non-person facts.",
-    "Each non-null location_hint, activity_hint, or tone_hint must exactly match a fact of the corresponding type; otherwise return null.",
+    "People and entities must repeat values of matching facts; each non-null hint must match a fact of its corresponding type, otherwise return empty arrays or null.",
     "Use visible_text only for legible text shown in the supplied image/frame. Do not invent OCR.",
     "Do not infer dates or event context from appearance. Use the provided capture timestamp only as metadata.",
     "Set uncertainty.status to possible when observed_facts is non-empty, otherwise unknown.",
@@ -510,9 +507,9 @@ export async function generateFragmentAnalysis(
         previous_output: result,
         repair_instructions: [
           "Regenerate the complete output using the supplied image evidence and exact required response schema.",
-          "Each fact's evidence string must contain its value exactly, with matching spelling and case.",
           "The overall confidence must be at most 0.7 and no fact confidence may exceed 0.7.",
-          "Remove any fact that cannot be supported with a matching evidence string.",
+          "Each fact's evidence string must briefly describe visible support for that fact.",
+          "Remove any fact that cannot be supported by direct visual evidence.",
           "The people/entities arrays and hints must match the remaining cited facts exactly.",
           "Return unknown uncertainty and no facts if there is insufficient direct visual evidence.",
         ],

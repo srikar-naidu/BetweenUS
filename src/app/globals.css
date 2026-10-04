@@ -2101,6 +2101,11 @@ body {
 .moment-start-card h3 { margin: 0; font-family: var(--serif); font-size: 23px; }
 .moment-start-card p { margin: 7px 0 14px; color: #40574f; font-size: 12px; line-height: 1.6; }
 .moment-start-card .secondary-button { min-height: 38px; }
+.moment-clue-list { display: grid; gap: 8px; margin: 14px 0; padding: 0; list-style: none; }
+.moment-clue-list li { display: grid; gap: 4px; padding: 10px 12px; border-left: 2px solid var(--green); background: #f2f1e8; }
+.moment-clue-list li strong { color: var(--ink); font-size: 12px; font-weight: 600; line-height: 1.5; }
+.moment-clue-list li > span:last-child { color: #40574f; font-size: 10px; line-height: 1.5; }
+.moment-clue-meta { color: var(--muted); font-family: var(--mono); font-size: 9px; text-transform: uppercase; }
 .moment-evidence-photo {
   display: block;
   width: min(100%, 280px);

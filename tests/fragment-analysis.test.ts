@@ -152,7 +152,7 @@ test("fragment-analysis schema binds evidence to its source and disallows confir
   assert.deepEqual(schema.properties.uncertainty.properties.status.enum, ["possible", "unknown"]);
 });
 
-test("visual summary fields are derived only from validated, cited observations", () => {
+test("visual summary fields are derived from observations with valid fragment and image provenance", () => {
   const visualOutput = {
     ...validOutput,
     summary: "",
@@ -204,6 +204,18 @@ test("visual summary fields are derived only from validated, cited observations"
   assert.equal(analysis.activityHint, null);
   assert.equal(analysis.toneHint, null);
   assert.equal(analysis.confidence, 0.5);
+  const semanticallyDescribed = validateFragmentAnalysisOutput({
+    ...visualOutput,
+    observed_facts: [{
+      ...visualOutput.observed_facts[0],
+      value: "balcony",
+      evidence: {
+        ...visualOutput.observed_facts[0].evidence,
+        evidence: "A railing runs across the upper level of the building.",
+      },
+    }],
+  }, fragmentId, "", "image", ["whole_image"]);
+  assert.equal(semanticallyDescribed.observedFacts[0].value, "balcony");
   assert.throws(
     () => validateFragmentAnalysisOutput({
       ...visualOutput,
@@ -211,7 +223,7 @@ test("visual summary fields are derived only from validated, cited observations"
         ...visualOutput.observed_facts[0],
         evidence: {
           ...visualOutput.observed_facts[0].evidence,
-          evidence: "A building is visible.",
+          locator: "different_image",
         },
       }],
     }, fragmentId, "", "image", ["whole_image"]),

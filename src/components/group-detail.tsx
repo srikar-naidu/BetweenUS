@@ -11,6 +11,7 @@ import { FragmentComposer } from "@/components/fragment-composer";
 import { GroupInvitePanel } from "@/components/group-invite-panel";
 import { VoiceTranscriptReview } from "@/components/voice-transcript-review";
 import { AudioWaveform } from "@/components/audio-waveform";
+import { momentReconstructionReadyFragments } from "@/lib/pipeline/moment-readiness";
 import Image from "next/image";
 
 export type GroupFragmentView = Omit<Fragment, "storageUri"> & {
@@ -425,14 +426,16 @@ export function GroupDetail({
     status: string;
   }>>([]);
   const fragmentsById = new Map(fragments.map((fragment) => [fragment.id, fragment]));
-  const reconstructableFragments = fragments.filter((fragment) =>
-    fragment.visibility === "group" &&
-    fragment.aiProcessingConsent &&
-    (fragment.status === "processed" || fragment.status === "needs_review") &&
-    ((fragment.type === "image" || fragment.type === "video")
-      ? fragment.mediaStorageAvailable === true
-      : hasApprovedTextSource(fragment)),
-  );
+  const reconstructableFragments = momentReconstructionReadyFragments(fragments);
+  const momentClueFragments = fragments
+    .filter((fragment) =>
+      fragment.visibility === "group" &&
+      fragment.aiProcessingConsent &&
+      fragment.deletionState === "active" &&
+      (fragment.status === "processed" || fragment.status === "needs_review") &&
+      fragment.analysis,
+    )
+    .slice(0, 4);
   const contributorLabels = new Map(
     [...new Set(fragments.map((fragment) => fragment.authorUserId))]
       .map((authorUserId, index) => [authorUserId, `Contributor ${index + 1}`]),
@@ -938,7 +941,8 @@ export function GroupDetail({
                     : hasApprovedTextSource(fragment)) &&
                     fragment.visibility === "group" &&
                     fragment.aiProcessingConsent &&
-                    (fragment.status === "processed" || fragment.status === "needs_review") && (
+                    (fragment.status === "processed" || fragment.status === "needs_review") &&
+                    reconstructableFragments.some((candidate) => candidate.id === fragment.id) && (
                       <button
                         className="text-button"
                         type="button"
@@ -1235,13 +1239,42 @@ export function GroupDetail({
               <div className="moment-start-card">
                 <span className="moment-start-number">01</span>
                 <div>
-                  <h3>No moments yet</h3>
+                  <h3>{momentClueFragments.length ? "Gathering moment clues" : "No moments yet"}</h3>
                   <p>
                     {reconstructableFragments.length
-                      ? `${reconstructableFragments.length} fragment${reconstructableFragments.length === 1 ? " is" : "s are"} ready. Ask Gemma to connect the clues, then review the suggestion before it becomes a shared Moment.`
-                      : "Share a fragment with the group and allow Gemma to analyze it. Once processing is ready, request a reconstruction from that fragment."}
+                      ? `${reconstructableFragments.length} analyzed fragments from different members are close in time. Request a reconstruction from one of those posts to review a possible Moment.`
+                      : momentClueFragments.length
+                        ? `${momentClueFragments.length} group post${momentClueFragments.length === 1 ? " has" : "s have"} Gemma observations. A shared Moment needs another analyzed post from a different member within about 20 minutes.`
+                        : "Group posts appear here as Gemma analyzes them. A possible shared Moment needs nearby evidence from more than one member, and always stays a candidate until reviewed."}
                   </p>
-                  <a className="secondary-button" href="#fragments">Review fragments <span aria-hidden="true">↗</span></a>
+                  {momentClueFragments.length > 0 && (
+                    <ul className="moment-clue-list" aria-label="Gemma analyzed clues">
+                      {momentClueFragments.map((fragment) => (
+                        <li key={fragment.id}>
+                          <span className="moment-clue-meta">
+                            {fragment.type === "image"
+                              ? "Photo"
+                              : fragment.type === "video"
+                                ? "Video"
+                                : fragment.type === "voice"
+                                  ? "Reviewed voice transcript"
+                                  : "Text"}
+                            {" · "}{formatCaptureTime(fragment.capturedAt)}
+                          </span>
+                          <strong>{fragment.analysis?.summary || "No directly supported detail found."}</strong>
+                          {fragment.analysis?.observedFacts.length ? (
+                            <span>
+                              {fragment.analysis.observedFacts.slice(0, 3).map((fact) => fact.value).join(" · ")}
+                            </span>
+                          ) : null}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <a className="secondary-button" href="#fragments">
+                    {reconstructableFragments.length ? "Choose a fragment to reconstruct" : "Review fragments"}
+                    <span aria-hidden="true">↗</span>
+                  </a>
                 </div>
               </div>
             )}
