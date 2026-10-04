@@ -11,12 +11,11 @@ It is not a chatbot or a conventional shared-photo feed. The central unit is the
 Watch the product walkthrough:
 
 <p align="center">
-  <video src="https://github.com/srikar-naidu/BetweenUS/raw/refs/heads/main/public/video.mp4" controls muted playsinline width="100%">
-    Your Markdown viewer does not support embedded video. <a href="https://github.com/srikar-naidu/BetweenUS/raw/refs/heads/main/public/video.mp4">Watch or download the Between Us demo</a>.
+  <video controls muted playsinline width="100%">
+    <source src="https://raw.githubusercontent.com/srikar-naidu/BetweenUS/main/public/video.mp4" type="video/mp4">
+    Your Markdown viewer does not support embedded video. <a href="https://raw.githubusercontent.com/srikar-naidu/BetweenUS/main/public/video.mp4">Watch or download the Between Us demo</a>.
   </video>
 </p>
-
-The video is also available in the repository at [`public/video.mp4`](public/video.mp4).
 
 ## How it works
 
