@@ -3,16 +3,22 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20.19.0 <22 || >=22.12.0 <23 || >=23.2.0"
+  },
   "scripts": {
     "dev": "node --require ./scripts/node-dns-bootstrap.cjs ./node_modules/next/dist/bin/next dev",
     "build": "node --require ./scripts/node-dns-bootstrap.cjs ./node_modules/next/dist/bin/next build",
     "start": "node --require ./scripts/node-dns-bootstrap.cjs ./node_modules/next/dist/bin/next start",
     "worker": "node --require ./scripts/node-dns-bootstrap.cjs --import tsx ./src/temporal/worker.ts",
     "evaluate:phase7": "tsx experiments/phase7/run.ts",
+    "evaluate:phase9": "tsx experiments/phase9/run.ts",
     "typecheck": "tsc --noEmit",
     "test": "tsx --test tests/*.test.ts"
   },
   "dependencies": {
+    "@sentry/nextjs": "^11.4.0",
+    "@sentry/node": "^11.4.0",
     "@temporalio/activity": "^1.24.0",
     "@temporalio/client": "^1.24.0",
     "@temporalio/worker": "^1.24.0",

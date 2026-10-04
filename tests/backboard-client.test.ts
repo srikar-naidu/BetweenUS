@@ -97,3 +97,21 @@ test("Backboard errors do not include provider response bodies", async () => {
       !error.message.includes("sensitive provider detail"),
   );
 });
+
+test("Backboard operations time out without exposing provider details", async () => {
+  let requests = 0;
+  const client = new BackboardClient(
+    { apiKey: "test-key", baseUrl: "https://app.backboard.io/api", timeoutMs: 1000 },
+    async () => {
+      requests += 1;
+      return Response.json({ status: "in_progress" });
+    },
+  );
+
+  await assert.rejects(
+    client.waitForOperation("operation-a", async () => undefined),
+    (error: unknown) => error instanceof BackboardApiError &&
+      error.statusCode === null,
+  );
+  assert.equal(requests, 1);
+});

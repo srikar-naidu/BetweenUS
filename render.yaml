@@ -1,0 +1,83 @@
+services:
+  - type: web
+    name: betweenus-web
+    runtime: node
+    region: oregon
+    plan: starter
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+    healthCheckPath: /api/health
+    autoDeploy: false
+    envVars:
+      - fromGroup: betweenus-shared
+      - key: MONGODB_URI
+        sync: false
+      - key: TIGER_DATABASE_URL
+        sync: false
+      - key: BETTER_AUTH_SECRET
+        sync: false
+      - key: BETTER_AUTH_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: OLLAMA_HOST
+        sync: false
+      - key: TEMPORAL_ADDRESS
+        sync: false
+      - key: TEMPORAL_NAMESPACE
+        sync: false
+      - key: TEMPORAL_API_KEY
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+      - key: NEXT_PUBLIC_SENTRY_DSN
+        sync: false
+
+  - type: worker
+    name: betweenus-temporal-worker
+    runtime: node
+    region: oregon
+    plan: starter
+    buildCommand: npm ci
+    startCommand: npm run worker
+    autoDeploy: false
+    envVars:
+      - fromGroup: betweenus-shared
+      - key: MONGODB_URI
+        sync: false
+      - key: TIGER_DATABASE_URL
+        sync: false
+      - key: OLLAMA_HOST
+        sync: false
+      - key: TEMPORAL_ADDRESS
+        sync: false
+      - key: TEMPORAL_NAMESPACE
+        sync: false
+      - key: TEMPORAL_API_KEY
+        sync: false
+      - key: SENTRY_DSN
+        sync: false
+
+envVarGroups:
+  - name: betweenus-shared
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_DB_NAME
+        value: between_us
+      - key: GEMMA_MODEL
+        value: gemma4:e2b-it-q4_K_M
+      - key: GEMMA_TIMEOUT_MS
+        value: "300000"
+      - key: TEMPORAL_TLS
+        value: "true"
+      - key: TEMPORAL_TASK_QUEUE
+        value: between-us-processing
+      - key: SENTRY_ENABLED
+        value: "false"
+      - key: NEXT_PUBLIC_SENTRY_ENABLED
+        value: "false"
+      - key: ELEVENLABS_TRANSCRIPTION_ENABLED
+        value: "false"

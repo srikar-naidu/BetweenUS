@@ -245,6 +245,10 @@ Make the interface bold and emotionally alive, but keep evidence and privacy unm
 
 ### Phase 9: Evaluation, deployment, and pilot
 
+**Current implementation status:** Added `npm run evaluate:phase9`, a deterministic synthetic-only fixture with 84 fragments, 12 groups, and 24 labeled event IDs, including held-out groups/events and all listed difficult-case categories. The report measures false merges and missed same-event pairs at explicit ranking cutoffs, runs proposals through the server evidence validator, and verifies private/foreign-group evidence rejection plus the no-automatic-confirmation uncertainty rule. This is a synthetic acceptance harness, not a real labeled participant dataset or measured model/pilot performance.
+
+Added opt-in Sentry initialization for Next.js client/server/edge and the Temporal worker. The shared privacy filter reconstructs error events from an allowlist and drops span attributes/links; request bodies, AI content, media, user identity, local variables, breadcrumbs, and replay remain disabled. Sentry is off unless an operator explicitly sets the server and browser flags and DSNs. The Render blueprint defines separate web and worker services with manual secret prompts, auto-deploy disabled, and a liveness health endpoint. No deployment, live Sentry delivery, staging recovery, provider account check, or pilot has been performed.
+
 - Evaluate on a held-out, labeled dataset (target: 50–100 fragments across multiple small events and unrelated near-neighbors). Include spec cases: same place/different event, same people/different event, misleading text, single uploader, mixed media, and insufficient evidence.
 - Require 100% valid evidence IDs after server validation, zero cross-group leaks, zero private-fragment evidence leakage, and no confirmed moment without explicit member action. Track false merges and misses; block launch if false merges exceed the agreed pilot threshold.
 - Test provider outage, malformed Gemma output, Backboard timeout, ElevenLabs quota exhaustion, queue retries, media deletion, and duplicate uploads.
@@ -254,7 +258,7 @@ Make the interface bold and emotionally alive, but keep evidence and privacy unm
 - Connect the Node worker to Temporal Cloud or the approved Temporal deployment and verify workflow retries/recovery in staging.
 - Start with an invite-only pilot group, collect corrections and user-perceived errors, and re-run the eval set before widening access.
 
-**Release gate:** all privacy/evidence acceptance checks pass; one complete multi-user upload-to-moment workflow succeeds in staging; provider cost caps and deletion checks are confirmed.
+**Release gate:** the local synthetic acceptance harness passes, but launch remains blocked until an operator sets the acceptable pilot false-merge threshold, validates the safeguards with a real approved 50–100-fragment dataset, confirms a complete multi-user upload-to-moment workflow and retry/recovery in staging, verifies provider cost caps and deletion checks, and recruits an invite-only pilot group. The checked-in synthetic report does not satisfy those external gates.
 
 ## Additional sponsor experiments and explicit deferrals
 

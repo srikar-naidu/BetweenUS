@@ -63,7 +63,7 @@ The runtime adapter targets Ollama's HTTP API; it does not assume a different lo
 
 ## Setup overview
 
-The application foundation uses Next.js App Router and TypeScript on Node.js. Better Auth provides Google OAuth and MongoDB-backed group membership; all group data routes verify the server session and membership. MongoDB Atlas owns canonical fragment and moment records. Tiger Data stores a derived, group-visible retrieval projection.
+The application foundation uses Next.js App Router and TypeScript on Node.js 20.19+, 22.12+, or 23.2+. Better Auth provides Google OAuth and MongoDB-backed group membership; all group data routes verify the server session and membership. MongoDB Atlas owns canonical fragment and moment records. Tiger Data stores a derived, group-visible retrieval projection.
 
 The provider in `src/lib/ai/gemma-provider.ts` sends compact context packets to Ollama's non-streaming `/api/chat` endpoint, requests JSON Schema-constrained output, and can pass image bytes for multimodal analysis. Configuration defaults to `http://localhost:11434`, `gemma4:e2b-it-q4_K_M`, and a five-minute timeout; override these with `OLLAMA_HOST`, `GEMMA_MODEL`, and `GEMMA_TIMEOUT_MS`.
 
@@ -85,6 +85,13 @@ Voice-note uploads require mono 16-bit PCM WAV at 16 kHz, up to 60 seconds/2 MB.
 
 Members can request Moment reconstruction from an eligible group-visible text fragment. Gemma receives a bounded context packet; the server validates evidence and derives uncertainty, and group members can review candidates, correct or remove evidence, and confirm moments. Merge actions require MongoDB transaction support. Backboard memory is disabled by default: an owner/admin must enable it, and a member must explicitly share an individual correction on a confirmed Moment. Set `BACKBOARD_API_KEY` on the server; brief summaries/entities from eligible group-visible fragments may be sent as read-only search queries, but raw source text is not sent to Backboard. Disabling Backboard or deleting a group removes the group's Backboard assistant.
 
+## Phase 9 evaluation and deployment preparation
+
+Run `npm run evaluate:phase9` for the deterministic synthetic acceptance report. It contains 84 generated fragments across development and held-out event/group splits, with same-place and same-people near-neighbors, misleading text, single-contributor evidence, synthetic mixed-modality labels, and insufficient-evidence examples. The report measures retrieval false merges/misses and exercises server evidence validation against private and foreign-group IDs. It contains no real participant content and is not a model-quality or pilot-performance claim. Set an explicit acceptable pilot false-merge threshold before launch.
+
+`render.yaml` prepares separate Render web and Temporal worker services, and `/api/health` is a liveness endpoint. The blueprint does not deploy automatically. Before creating paid services, an operator must supply credentials and verify MongoDB/Tiger access, a reachable Ollama endpoint, Google OAuth callbacks, Temporal Cloud/staging configuration and recovery, deletion behavior, provider terms/cost limits, and the pilot invite list.
+
+Sentry is disabled by default (`SENTRY_ENABLED=false` and `NEXT_PUBLIC_SENTRY_ENABLED=false`). Before enabling it, an operator must verify the Sentry project and retention settings. The SDK disables identity, cookies, headers, request/response bodies, query parameters, GenAI content, database payloads, queue arguments, local variables, and replay. Event and span hooks replace exception details and remove request/context/attribute data; no source maps are uploaded. Staging must still verify actual incoming events are scrubbed before enabling telemetry for a pilot.
 
 ## Documentation set
 
