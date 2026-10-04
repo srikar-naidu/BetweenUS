@@ -1,9 +1,13 @@
 "use client";
 
-import { useRef, useState } from "react";
-import type { FragmentVisibility } from "@/lib/domain/memory";
-import { MAX_IMAGE_FILE_BYTES, MAX_VIDEO_FILE_BYTES } from "@/lib/ingestion/media-validation";
+import Image from "next/image";
+import { useEffect, useRef, useState } from "react";
+import { AudioWaveform } from "@/components/audio-waveform";
 import type { GroupFragmentView } from "@/components/group-detail";
+import { MAX_IMAGE_FILE_BYTES, MAX_VIDEO_FILE_BYTES } from "@/lib/ingestion/media-validation";
+import { MAX_VOICE_FILE_BYTES } from "@/lib/ingestion/voice-validation";
+
+type PostType = "text" | "image" | "audio" | "video";
 
 function localDateTimeValue(): string {
   const now = new Date();
@@ -21,6 +25,13 @@ async function readError(response: Response): Promise<string> {
   return "Request could not be completed.";
 }
 
+const postTypes: Array<{ id: PostType; label: string }> = [
+  { id: "text", label: "Text" },
+  { id: "image", label: "Photo" },
+  { id: "audio", label: "Audio" },
+  { id: "video", label: "Video" },
+];
+
 export function FragmentComposer({
   groupId,
   onCreated,
@@ -28,306 +39,343 @@ export function FragmentComposer({
   groupId: string;
   onCreated: (fragment: GroupFragmentView) => void;
 }) {
-  const [textContent, setTextContent] = useState("");
-  const [voiceFile, setVoiceFile] = useState<File | null>(null);
-  const [transcriptionConsent, setTranscriptionConsent] = useState(false);
-  const [voiceSubmitting, setVoiceSubmitting] = useState(false);
-  const [voiceMessage, setVoiceMessage] = useState<string | null>(null);
-  const [mediaFile, setMediaFile] = useState<File | null>(null);
-  const mediaFileInput = useRef<HTMLInputElement>(null);
-  const [mediaCaption, setMediaCaption] = useState("");
-  const [mediaVisibility, setMediaVisibility] = useState<FragmentVisibility>("private");
-  const [mediaAiProcessingConsent, setMediaAiProcessingConsent] = useState(false);
-  const [mediaSubmitting, setMediaSubmitting] = useState(false);
-  const [mediaMessage, setMediaMessage] = useState<string | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [postType, setPostType] = useState<PostType | null>(null);
   const [capturedAt, setCapturedAt] = useState(localDateTimeValue);
-  const [visibility, setVisibility] = useState<FragmentVisibility>("private");
+  const [textContent, setTextContent] = useState("");
+  const [mediaFile, setMediaFile] = useState<File | null>(null);
+  const [caption, setCaption] = useState("");
   const [aiProcessingConsent, setAiProcessingConsent] = useState(false);
+  const [transcriptionConsent, setTranscriptionConsent] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const idempotencyKey = useRef<string | null>(null);
-  const voiceIdempotencyKey = useRef<string | null>(null);
-  const mediaIdempotencyKey = useRef<string | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  async function submitText(event: React.FormEvent<HTMLFormElement>) {
+  useEffect(() => {
+    if (!mediaFile) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(mediaFile);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [mediaFile]);
+
+  function openComposer() {
+    setIsOpen(true);
+    setMessage(null);
+  }
+
+  function selectPostType(type: PostType) {
+    setPostType(type);
+    setMediaFile(null);
+    setCaption("");
+    setTextContent("");
+    setAiProcessingConsent(false);
+    setTranscriptionConsent(false);
+    idempotencyKey.current = null;
+    if (fileInput.current) fileInput.current.value = "";
+    setMessage(null);
+  }
+
+  async function submitPost(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!textContent.trim()) {
-      setMessage("Enter a text fragment first.");
+    if (!postType) return;
+    if (postType === "text" && !textContent.trim()) {
+      setMessage("Write something before posting.");
+      return;
+    }
+    if (postType !== "text" && !mediaFile) {
+      setMessage(`Choose a ${postType === "image" ? "photo" : postType} first.`);
+      return;
+    }
+    if (postType === "image" && mediaFile && mediaFile.size > MAX_IMAGE_FILE_BYTES) {
+      setMessage("Photos must be smaller than 12 MB.");
+      return;
+    }
+    if (postType === "video" && mediaFile && mediaFile.size > MAX_VIDEO_FILE_BYTES) {
+      setMessage("Videos must be smaller than 25 MB.");
+      return;
+    }
+    if (postType === "audio" && mediaFile && mediaFile.size > MAX_VOICE_FILE_BYTES) {
+      setMessage("Audio notes must be smaller than 2 MB.");
       return;
     }
     setIsSubmitting(true);
     setMessage(null);
     idempotencyKey.current ??= crypto.randomUUID();
+    const capturedAtIso = new Date(capturedAt).toISOString();
+    const capturedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     try {
-      const response = await fetch(`/api/groups/${groupId}/fragments`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Idempotency-Key": idempotencyKey.current,
-        },
-        body: JSON.stringify({
-          textContent,
-          capturedAt: new Date(capturedAt).toISOString(),
-          capturedTimeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-          visibility,
-          aiProcessingConsent,
-        }),
-      });
+      let response: Response;
+      if (postType === "text") {
+        response = await fetch(`/api/groups/${groupId}/fragments`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": idempotencyKey.current,
+          },
+          body: JSON.stringify({
+            textContent,
+            capturedAt: capturedAtIso,
+            capturedTimeZone,
+            visibility: "group",
+            aiProcessingConsent,
+          }),
+        });
+      } else if (postType === "audio" && mediaFile) {
+        response = await fetch(`/api/groups/${groupId}/voice`, {
+          method: "POST",
+          headers: {
+            "Content-Type": mediaFile.type || "audio/wav",
+            "Idempotency-Key": idempotencyKey.current,
+            "X-Captured-At": capturedAtIso,
+            "X-Captured-Time-Zone": capturedTimeZone,
+            "X-Transcription-Consent": String(transcriptionConsent),
+            "X-AI-Processing-Consent": "false",
+            "X-Fragment-Caption": encodeURIComponent(caption),
+          },
+          body: mediaFile,
+        });
+      } else if (mediaFile) {
+        response = await fetch(`/api/groups/${groupId}/media`, {
+          method: "POST",
+          headers: {
+            "Content-Type": mediaFile.type,
+            "Idempotency-Key": idempotencyKey.current,
+            "X-Captured-At": capturedAtIso,
+            "X-Captured-Time-Zone": capturedTimeZone,
+            "X-Fragment-Caption": encodeURIComponent(caption),
+            "X-AI-Processing-Consent": String(aiProcessingConsent),
+          },
+          body: mediaFile,
+        });
+      } else {
+        throw new Error("Select a file to continue.");
+      }
+
       if (!response.ok) throw new Error(await readError(response));
       const result = await response.json() as {
         fragment: GroupFragmentView;
-        processingStatus: GroupFragmentView["processingJobStatus"];
+        processingStatus?: string | null;
+        transcriptionStatus?: string;
+        manualReason?: string | null;
       };
       onCreated(result.fragment);
-      setTextContent("");
-      idempotencyKey.current = null;
       setMessage(
-        result.processingStatus === "queued"
-          ? "Text fragment saved and queued."
-          : result.processingStatus === null
-            ? "Text fragment saved. AI processing is off."
-            : "Text fragment saved; processing could not start.",
+        postType === "audio"
+          ? result.transcriptionStatus === "transcribing"
+            ? "Audio posted to the group. Transcription is processing; review it before Gemma can analyze the transcript."
+            : "Audio posted to the group. Review or enter a transcript before choosing Gemma analysis."
+          : aiProcessingConsent
+            ? `${postType === "text" ? "Text" : postType === "image" ? "Photo" : "Video"} posted. Gemma processing is ${result.processingStatus === "queued" ? "queued" : "not available yet"}.`
+            : "Posted to the group. AI classification is off.",
       );
+      setTextContent("");
+      setMediaFile(null);
+      setCaption("");
+      setAiProcessingConsent(false);
+      setTranscriptionConsent(false);
+      idempotencyKey.current = null;
+      if (fileInput.current) fileInput.current.value = "";
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Text fragment could not be saved.");
+      setMessage(error instanceof Error ? error.message : "Post could not be saved.");
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  async function submitVoice(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!voiceFile) {
-      setVoiceMessage("Choose a WAV voice note first.");
-      return;
-    }
-    setVoiceSubmitting(true);
-    setVoiceMessage(null);
-    voiceIdempotencyKey.current ??= crypto.randomUUID();
-    try {
-      const response = await fetch(`/api/groups/${groupId}/voice`, {
-        method: "POST",
-        headers: {
-          "Content-Type": voiceFile.type || "audio/wav",
-          "Idempotency-Key": voiceIdempotencyKey.current,
-          "X-Captured-At": new Date(capturedAt).toISOString(),
-          "X-Captured-Time-Zone": Intl.DateTimeFormat().resolvedOptions().timeZone,
-          "X-Transcription-Consent": String(transcriptionConsent),
-        },
-        body: voiceFile,
-      });
-      if (!response.ok) throw new Error(await readError(response));
-      const result = await response.json() as {
-        fragment: GroupFragmentView;
-        transcriptionStatus: string;
-        manualReason?: string | null;
-      };
-      onCreated(result.fragment);
-      voiceIdempotencyKey.current = null;
-      setVoiceFile(null);
-      setTranscriptionConsent(false);
-      setVoiceMessage(result.transcriptionStatus === "transcribing"
-        ? "Voice note uploaded privately. Transcription is queued; review it before sharing."
-        : result.manualReason === "monthly_limit"
-          ? "Monthly transcription limit reached. The note is private; enter the transcript manually to continue."
-          : result.manualReason === "provider_disabled"
-            ? "ElevenLabs is not enabled. The note is private; enter the transcript manually to continue."
-            : "Voice note uploaded privately. Enter or review the transcript before sharing.");
-    } catch (error) {
-      setVoiceMessage(error instanceof Error ? error.message : "Voice note could not be saved.");
-    } finally {
-      setVoiceSubmitting(false);
-    }
-  }
-
-  async function submitMedia(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!mediaFile) {
-      setMediaMessage("Choose a photo or video first.");
-      return;
-    }
-    const isVideo = mediaFile.type.startsWith("video/");
-    const maximumBytes = isVideo ? MAX_VIDEO_FILE_BYTES : MAX_IMAGE_FILE_BYTES;
-    if (mediaFile.size > maximumBytes) {
-      setMediaMessage(isVideo ? "Videos must be smaller than 25 MB." : "Photos must be smaller than 12 MB.");
-      return;
-    }
-    setMediaSubmitting(true);
-    setMediaMessage(null);
-    mediaIdempotencyKey.current ??= crypto.randomUUID();
-    try {
-      const response = await fetch(`/api/groups/${groupId}/media`, {
-        method: "POST",
-        headers: {
-          "Content-Type": mediaFile.type,
-          "Idempotency-Key": mediaIdempotencyKey.current,
-          "X-Captured-At": new Date(capturedAt).toISOString(),
-          "X-Captured-Time-Zone": Intl.DateTimeFormat().resolvedOptions().timeZone,
-          "X-Fragment-Visibility": mediaVisibility,
-          "X-Fragment-Caption": encodeURIComponent(mediaCaption),
-          "X-AI-Processing-Consent": String(mediaAiProcessingConsent),
-        },
-        body: mediaFile,
-      });
-      if (!response.ok) throw new Error(await readError(response));
-      const result = await response.json() as { fragment: GroupFragmentView };
-      onCreated(result.fragment);
-      setMediaFile(null);
-      if (mediaFileInput.current) mediaFileInput.current.value = "";
-      setMediaCaption("");
-      setMediaAiProcessingConsent(false);
-      mediaIdempotencyKey.current = null;
-      setMediaMessage(
-        mediaAiProcessingConsent
-          ? `${isVideo ? "Video" : "Photo"} saved. Private Gemma analysis is ${result.fragment.processingJobStatus === "queued" ? "queued" : "not available yet"}; its observations remain tentative.`
-          : `${isVideo ? "Video" : "Photo"} saved without AI processing. It is only visible according to your privacy setting.`,
-      );
-    } catch (error) {
-      setMediaMessage(error instanceof Error ? error.message : "Photo or video could not be saved.");
-    } finally {
-      setMediaSubmitting(false);
-    }
-  }
-
   return (
     <section className="fragment-composer" id="add-fragment" aria-labelledby="fragment-composer-title">
-      <div className="section-head">
-        <h2 id="fragment-composer-title">Add a fragment</h2>
-        <span>Private by default</span>
-      </div>
-      <form className="fragment-composer-form" onSubmit={submitText}>
-        <label>
-          Text
-          <textarea value={textContent} maxLength={10_000} required onChange={(event) => setTextContent(event.target.value)} />
-        </label>
-        <label>
-          Captured at
-          <input type="datetime-local" value={capturedAt} required onChange={(event) => {
-            setCapturedAt(event.target.value);
-            idempotencyKey.current = null;
-            voiceIdempotencyKey.current = null;
-            mediaIdempotencyKey.current = null;
-          }} />
-        </label>
-        <label>
-          Visibility
-          <select value={visibility} onChange={(event) => setVisibility(event.target.value as FragmentVisibility)}>
-            <option value="private">Only me</option>
-            <option value="group">Group</option>
-            <option value="restricted">Restricted</option>
-          </select>
-        </label>
-        <label className="consent-control">
-          <input type="checkbox" checked={aiProcessingConsent} onChange={(event) => setAiProcessingConsent(event.target.checked)} />
-          Allow AI processing
-        </label>
-        <button className="primary-button" type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Saving…" : "Save text fragment"}
-        </button>
-        {message && <p className="privacy-status" role="status">{message}</p>}
-      </form>
-      <form className="fragment-composer-form media-composer-form" onSubmit={(event) => void submitMedia(event)}>
-        <div className="media-composer-heading">
-          <div>
-            <h3>Share a photo or video</h3>
-            <p>Photos: JPEG, PNG, or WebP, up to 12 MB. Videos: MP4 or WebM, up to 25 MB.</p>
-          </div>
-          <span className="media-composer-mark" aria-hidden="true">✳</span>
+      <div className="post-entry">
+        <div>
+          <p className="eyebrow">A SHARED SPACE</p>
+          <h2 id="fragment-composer-title">Add to your memories</h2>
+          <p>Little things from your time together belong here.</p>
         </div>
-        <label>
-          Choose a photo or short video
-          <input
-            ref={mediaFileInput}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,video/mp4,video/webm"
-            required
-            onChange={(event) => {
-              setMediaFile(event.target.files?.[0] ?? null);
-              setMediaAiProcessingConsent(false);
-              mediaIdempotencyKey.current = null;
-              setMediaMessage(null);
-            }}
-          />
-        </label>
-        {mediaFile && <p className="media-file-name" role="status">{mediaFile.name}</p>}
-        <label>
-          Caption <span>(optional)</span>
-          <textarea
-            value={mediaCaption}
-            maxLength={1_000}
-            placeholder="What do you want your friends to remember about this?"
-            onChange={(event) => {
-              setMediaCaption(event.target.value);
-              mediaIdempotencyKey.current = null;
-            }}
-          />
-        </label>
-        <label>
-          Who can see this?
-          <select
-            value={mediaVisibility}
-            onChange={(event) => {
-              setMediaVisibility(event.target.value as FragmentVisibility);
-              mediaIdempotencyKey.current = null;
-            }}
-          >
-            <option value="private">Only me</option>
-            <option value="group">Everyone in this group</option>
-            <option value="restricted">Restricted</option>
-          </select>
-        </label>
-        <label className="consent-control">
-          <input
-            type="checkbox"
-            checked={mediaAiProcessingConsent}
-            onChange={(event) => {
-              setMediaAiProcessingConsent(event.target.checked);
-              mediaIdempotencyKey.current = null;
-            }}
-          />
-          I consent to private Gemma processing for tentative observations
-        </label>
-        <p className="privacy-status media-privacy-note">
-          Off by default. If enabled, this photo or video is processed by Between Us&apos; private Gemma
-          runtime, not a third-party LLM. The model will not identify people. Observations are
-          suggestions, not verified facts. Voice audio has a separate transcription choice.
-        </p>
-        <button className="secondary-button" type="submit" disabled={mediaSubmitting || !mediaFile}>
-          {mediaSubmitting ? "Uploading…" : "Post photo or video"}
-        </button>
-        {mediaMessage && <p className="privacy-status" role="status">{mediaMessage}</p>}
-      </form>
-      <form className="fragment-composer-form voice-composer-form" onSubmit={submitVoice}>
-        <label>
-          Voice note (WAV, mono 16-bit PCM at 16 kHz, up to 60 seconds / 2 MB)
-          <input
-            type="file"
-            accept=".wav,audio/wav,audio/x-wav"
-            onChange={(event) => {
-              setVoiceFile(event.target.files?.[0] ?? null);
-              setTranscriptionConsent(false);
-              voiceIdempotencyKey.current = null;
-            }}
-          />
-        </label>
-        <label className="consent-control">
-          <input
-            type="checkbox"
-            checked={transcriptionConsent}
-            onChange={(event) => setTranscriptionConsent(event.target.checked)}
-          />
-          I explicitly consent to sending this audio to ElevenLabs for transcription.
-        </label>
-        <p className="privacy-status">
-          Audio is stored privately by Between Us. Transcription is optional and may be unavailable
-          when disabled or at its monthly usage limit; in that case, you can enter a transcript manually.
-          The transcript stays private until you review and approve it.
-        </p>
-        <button className="secondary-button" type="submit" disabled={voiceSubmitting || !voiceFile}>
-          {voiceSubmitting ? "Uploading…" : "Save private voice note"}
-        </button>
-        {voiceMessage && <p className="privacy-status" role="status">{voiceMessage}</p>}
-      </form>
+        {!isOpen && (
+          <button className="primary-button post-open-button" type="button" onClick={openComposer}>
+            Post <span aria-hidden="true">+</span>
+          </button>
+        )}
+      </div>
+
+      {isOpen && (
+        <div className="post-composer">
+          <div className="post-type-picker" role="group" aria-label="Choose post type">
+            {postTypes.map((type) => (
+              <button
+                key={type.id}
+                className="post-type-button"
+                type="button"
+                aria-pressed={postType === type.id}
+                onClick={() => selectPostType(type.id)}
+              >
+                {type.label}
+              </button>
+            ))}
+          </div>
+
+          {postType && (
+            <form className="post-form" onSubmit={(event) => void submitPost(event)}>
+              {postType === "text" ? (
+                <label>
+                  What do you want to remember?
+                  <textarea
+                    value={textContent}
+                    maxLength={10_000}
+                    required
+                    autoFocus
+                    placeholder="Write a note for your group…"
+                    onChange={(event) => {
+                      setTextContent(event.target.value);
+                      idempotencyKey.current = null;
+                    }}
+                  />
+                </label>
+              ) : (
+                <>
+                  <label className="post-file-picker">
+                    <input
+                      className="post-file-input"
+                      ref={fileInput}
+                      type="file"
+                      accept={
+                        postType === "image"
+                          ? "image/jpeg,image/png,image/webp"
+                          : postType === "video"
+                            ? "video/mp4,video/webm"
+                            : ".wav,audio/wav,audio/x-wav"
+                      }
+                      required
+                      onChange={(event) => {
+                        setMediaFile(event.target.files?.[0] ?? null);
+                        setAiProcessingConsent(false);
+                        idempotencyKey.current = null;
+                        setMessage(null);
+                      }}
+                    />
+                    <span className="post-file-button">
+                      {mediaFile
+                        ? postType === "image" ? "Change photo" : postType === "video" ? "Change video" : "Change audio"
+                        : postType === "image" ? "Choose a photo" : postType === "video" ? "Choose a video" : "Choose an audio note"}
+                    </span>
+                  </label>
+                  {previewUrl && postType === "image" && (
+                    <Image
+                      className="post-image-preview"
+                      src={previewUrl}
+                      alt="Selected photo preview"
+                      width={900}
+                      height={600}
+                      unoptimized
+                    />
+                  )}
+                  {previewUrl && postType === "video" && (
+                    <video className="post-video-preview" src={previewUrl} controls playsInline preload="metadata">
+                      Your browser does not support video playback.
+                    </video>
+                  )}
+                  {previewUrl && postType === "audio" && (
+                    <AudioWaveform src={previewUrl} label="Audio preview" />
+                  )}
+                  {postType !== "audio" && (
+                    <label>
+                      Caption <span>(optional)</span>
+                      <textarea
+                        value={caption}
+                        maxLength={1_000}
+                        placeholder="Add a little context for your group…"
+                        onChange={(event) => {
+                          setCaption(event.target.value);
+                          idempotencyKey.current = null;
+                        }}
+                      />
+                    </label>
+                  )}
+                  {postType === "audio" && (
+                    <>
+                      <label>
+                        Caption <span>(optional)</span>
+                        <textarea
+                          value={caption}
+                          maxLength={1_000}
+                          placeholder="What should your group know about this audio?"
+                          onChange={(event) => {
+                            setCaption(event.target.value);
+                            idempotencyKey.current = null;
+                          }}
+                        />
+                      </label>
+                      <label className="consent-control">
+                        <input
+                          type="checkbox"
+                          checked={transcriptionConsent}
+                          onChange={(event) => {
+                            setTranscriptionConsent(event.target.checked);
+                            idempotencyKey.current = null;
+                          }}
+                        />
+                        Send audio to ElevenLabs for transcription (optional)
+                      </label>
+                      <p className="privacy-status">
+                        Audio itself is never sent to Gemma. Review the transcript first; you can opt in
+                        to Gemma analysis when you approve that text.
+                      </p>
+                    </>
+                  )}
+                </>
+              )}
+
+              <label className="post-date">
+                When was it?
+                <input
+                  type="datetime-local"
+                  value={capturedAt}
+                  required
+                  onChange={(event) => {
+                    setCapturedAt(event.target.value);
+                    idempotencyKey.current = null;
+                  }}
+                />
+              </label>
+              {postType !== "audio" && (
+                <label className="consent-control">
+                  <input
+                    type="checkbox"
+                    checked={aiProcessingConsent}
+                    onChange={(event) => {
+                      setAiProcessingConsent(event.target.checked);
+                      idempotencyKey.current = null;
+                    }}
+                  />
+                  Allow Gemma to classify this post
+                </label>
+              )}
+              <p className="post-audience-note">This will be visible to everyone in this group.</p>
+              <div className="post-actions">
+                <button className="primary-button" type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Posting…" : "Post to group"}
+                </button>
+                <button
+                  className="text-button"
+                  type="button"
+                  onClick={() => {
+                    setIsOpen(false);
+                    setPostType(null);
+                    setMessage(null);
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+              {message && <p className="privacy-status" role="status">{message}</p>}
+            </form>
+          )}
+        </div>
+      )}
     </section>
   );
 }

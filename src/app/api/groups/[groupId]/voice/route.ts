@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
+import { FRAGMENT_ANALYSIS_VERSION } from "@/lib/ai/fragment-analysis";
 import { apiErrorResponse } from "@/lib/api/errors";
 import { requireGroupMembership } from "@/lib/auth/group-access";
 import { FragmentInputError } from "@/lib/ingestion/fragment-validation";
+import {
+  MAX_MEDIA_CAPTION_CHARACTERS,
+  validateMediaCaption,
+} from "@/lib/ingestion/media-validation";
 import {
   MAX_VOICE_FILE_BYTES,
   validateVoiceCaptureMetadata,
@@ -69,6 +74,22 @@ export async function POST(
       return Response.json({ error: "Choose whether to send this audio to ElevenLabs for transcription" }, { status: 400 });
     }
     const transcriptionConsent = consentValue === "true";
+    const aiConsentValue = request.headers.get("x-ai-processing-consent");
+    if (aiConsentValue !== "true" && aiConsentValue !== "false") {
+      return Response.json({ error: "Choose whether Gemma may analyze the reviewed transcript" }, { status: 400 });
+    }
+    const aiProcessingConsent = aiConsentValue === "true";
+    const encodedCaption = request.headers.get("x-fragment-caption") ?? "";
+    if (encodedCaption.length > MAX_MEDIA_CAPTION_CHARACTERS * 3) {
+      return Response.json({ error: "Captions must be 1,000 characters or fewer" }, { status: 400 });
+    }
+    let caption: string | null;
+    try {
+      caption = validateMediaCaption(decodeURIComponent(encodedCaption));
+    } catch (error) {
+      if (error instanceof URIError) throw new FragmentInputError("Caption contains invalid text");
+      throw error;
+    }
     const { capturedAt, capturedTimeZone } = validateVoiceCaptureMetadata({
       capturedAt: request.headers.get("x-captured-at") ?? "",
       capturedTimeZone: request.headers.get("x-captured-time-zone") ?? "",
@@ -97,7 +118,9 @@ export async function POST(
         existing.checksumSha256 !== checksumSha256 ||
         existing.capturedAt.getTime() !== capturedAt.getTime() ||
         existing.capturedTimeZone !== capturedTimeZone ||
-        existing.transcriptionConsent !== transcriptionConsent
+        existing.transcriptionConsent !== transcriptionConsent ||
+        existing.caption !== caption ||
+        existing.aiProcessingConsent !== aiProcessingConsent
       ) {
         return Response.json({ error: "Idempotency key was already used for a different voice note" }, { status: 409 });
       }
@@ -154,6 +177,7 @@ export async function POST(
         source: "upload",
         storageUri,
         checksumSha256,
+        caption,
         capturedAt,
         capturedTimeZone,
         metadata: {
@@ -161,17 +185,21 @@ export async function POST(
           fileSizeBytes: clip.fileSizeBytes,
           mimeType: clip.mimeType,
         },
-        visibility: "private",
-        aiProcessingConsent: false,
+        visibility: "group",
+        aiProcessingConsent,
         transcriptionConsent,
-        processingVersion: "voice-note-v1",
+        processingVersion: aiProcessingConsent
+          ? `${FRAGMENT_ANALYSIS_VERSION}-${Date.now()}`
+          : "voice-note-v1",
       });
       fragmentCreated = fragment.storageUri === storageUri;
       if (
         fragment.checksumSha256 !== checksumSha256 ||
         fragment.capturedAt.getTime() !== capturedAt.getTime() ||
         fragment.capturedTimeZone !== capturedTimeZone ||
-        fragment.transcriptionConsent !== transcriptionConsent
+        fragment.transcriptionConsent !== transcriptionConsent ||
+        fragment.caption !== caption ||
+        fragment.aiProcessingConsent !== aiProcessingConsent
       ) {
         await storage.delete(storageUri);
         return Response.json({ error: "Idempotency key was already used for a different voice note" }, { status: 409 });

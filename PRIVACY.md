@@ -16,7 +16,7 @@ Rules:
 
 ## Media visibility
 
-Images, videos, and optional voice notes are stored in private MongoDB GridFS buckets and are available only through authenticated, group-scoped routes. Image/video inference is opt-in and sends only the source image or a bounded set of sampled frames to the configured Gemma service. Raw voice recordings are not sent to Gemma; only a transcript explicitly reviewed by its author is eligible. Existing legacy media records may remain for compatibility, and any original files in a previously configured bucket require manual cleanup.
+Images, videos, and optional voice notes are stored in private MongoDB GridFS buckets and are available only through authenticated, group-scoped routes. New posts made from a group are group-visible by design; the composer states this before submission and does not offer an audience selector. Image/video inference is opt-in and sends only the source image or a bounded set of sampled frames to the configured Gemma service. Raw voice recordings are not sent to Gemma; only a transcript explicitly reviewed by its author is eligible. External transcription remains separately opt-in. Existing legacy media records may remain for compatibility, and any original files in a previously configured bucket require manual cleanup.
 
 The system must enforce:
 
@@ -111,11 +111,11 @@ If the system is uncertain whether a fragment should be used in a shared inferen
 - Voice-note transcription is opt-in per author and disabled until provider retention, terms, credits, and account eligibility are reviewed.
 - Store voice audio in a private, group/fragment-scoped MongoDB GridFS bucket before any provider call. Currently accept only mono 16-bit PCM WAV at 16 kHz, at most 60 seconds and 2 MB.
 - Tell the uploader that audio leaves Between Us for transcription. Record provider-specific consent separately from local AI consent. Send only the selected audio file, not a full ContextPacket or group history.
-- Keep the fragment private and AI-disabled until the author edits/approves the transcript and selects visibility and local-AI consent. Preserve word timestamps as offsets to the original audio.
+- A group audio post is visible to its group, but transcript content remains author-only until the author edits and approves it. Ask for Gemma consent during transcript approval; analysis starts only after transcript approval. Preserve word timestamps as offsets to the original audio.
 - Keep the feature off by default. Enable only with `ELEVENLABS_TRANSCRIPTION_ENABLED=true`, an API key, and approved non-zero `ELEVENLABS_MONTHLY_SECONDS` and `ELEVENLABS_MONTHLY_REQUESTS`; enforce the clip cap server-side. Reservations are stored per UTC month and are not refunded after provider outcomes become uncertain.
 - ElevenLabs documents zero-retention mode as enterprise-only; do not assume it is available on a free-credit account.
 - Do not use voice cloning, speaker diarization, or TTS in the MVP. Do not automatically retry a failed external transcription.
-- If consent, quota, provider configuration, or Temporal is missing, retain the clip privately for manual transcription without blocking text-fragment capture.
+- If consent, quota, provider configuration, or Temporal is missing, retain the group audio post for manual transcription without blocking other posts.
 
 ### Tinker
 

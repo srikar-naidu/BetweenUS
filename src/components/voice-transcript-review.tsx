@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { FragmentVisibility } from "@/lib/domain/memory";
 import type { GroupFragmentView } from "@/components/group-detail";
 
 interface TranscriptResponse {
@@ -15,16 +14,17 @@ interface TranscriptResponse {
 export function VoiceTranscriptReview({
   groupId,
   fragmentId,
+  initialAiConsent,
   onApproved,
 }: {
   groupId: string;
   fragmentId: string;
+  initialAiConsent: boolean;
   onApproved: (fragment: GroupFragmentView) => void;
 }) {
   const [transcript, setTranscript] = useState("");
   const [status, setStatus] = useState<TranscriptResponse["status"] | null>(null);
-  const [visibility, setVisibility] = useState<FragmentVisibility>("private");
-  const [aiConsent, setAiConsent] = useState(false);
+  const [aiConsent, setAiConsent] = useState(initialAiConsent);
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -70,7 +70,7 @@ export function VoiceTranscriptReview({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           transcript,
-          visibility,
+          visibility: "group",
           aiProcessingConsent: aiConsent,
         }),
       });
@@ -86,8 +86,8 @@ export function VoiceTranscriptReview({
       onApproved(result.fragment);
       setStatus("reviewed");
       setMessage(result.processingStatus === "queued"
-        ? "Transcript approved and local AI analysis queued."
-        : "Transcript approved. It is now available according to the visibility you selected.");
+        ? "Transcript approved, shared with the group, and Gemma analysis queued."
+        : "Transcript approved and shared with the group.");
     } catch {
       setMessage("Could not reach the transcript review service.");
     } finally {
@@ -104,12 +104,14 @@ export function VoiceTranscriptReview({
       {status === null ? (
         <p className="privacy-status" role="status">Loading transcript status…</p>
       ) : status === "transcribing" ? (
-        <p className="privacy-status" role="status">Transcription is processing. This note remains private.</p>
+        <p className="privacy-status" role="status">
+          Audio is visible to the group. The transcript remains private until you approve it.
+        </p>
       ) : (
         <form className="fragment-composer-form" onSubmit={(event) => void approve(event)}>
           {status === "failed" && <p className="privacy-status">Transcription did not complete. You can enter or edit the transcript manually.</p>}
           <label>
-            Review and edit transcript before sharing
+            Review and edit transcript before sharing it with the group
             <textarea
               value={transcript}
               maxLength={10_000}
@@ -117,17 +119,9 @@ export function VoiceTranscriptReview({
               onChange={(event) => setTranscript(event.target.value)}
             />
           </label>
-          <label>
-            Transcript visibility
-            <select value={visibility} onChange={(event) => setVisibility(event.target.value as FragmentVisibility)}>
-              <option value="private">Only me</option>
-              <option value="group">Group</option>
-              <option value="restricted">Restricted</option>
-            </select>
-          </label>
           <label className="consent-control">
             <input type="checkbox" checked={aiConsent} onChange={(event) => setAiConsent(event.target.checked)} />
-            Allow local AI processing of this approved transcript
+            Allow Gemma to classify this approved transcript
           </label>
           <button className="secondary-button" type="submit" disabled={pending || !transcript.trim()}>
             {pending ? "Saving…" : "Approve transcript"}

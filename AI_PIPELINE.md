@@ -28,15 +28,15 @@ Text/image/video capture -> validate -> Mongo Fragment/ProcessingJob
   -> member confirm/reject -> evaluation example -> gated Tinker study
 ```
 
-Text, image, and short video ingestion, consent-gated observations, group-scoped retrieval, private-by-default access boundaries, and Temporal worker processing are implemented. Voice audio is stored in MongoDB GridFS and never sent to Gemma; optional external transcription is separately gated.
+Text, image, and short video ingestion, consent-gated observations, group-scoped retrieval, and Temporal worker processing are implemented. New posts are group-visible because they are created within a group. Voice audio is stored in MongoDB GridFS and never sent to Gemma; optional external transcription is separately gated.
 
 ## 1. Ingestion and provenance
 
-The authenticated API binds each submission to the current user and requested group. Text submissions validate length, capture timestamp/timezone, visibility, and consent. Voice submissions validate WAV PCM format, actual duration, size, capture timestamp/timezone, and a separate provider-specific consent. Voice uploads are private and AI-disabled until the author approves the transcript.
+The authenticated API binds each submission to the current user and requested group. Text submissions validate length, capture timestamp/timezone, group visibility, and consent. Voice submissions validate WAV PCM format, actual duration, size, capture timestamp/timezone, and a separate provider-specific consent. A voice post is group-visible; its transcript remains author-only until review. Gemma analysis, if consented, waits until transcript approval.
 
-MongoDB stores canonical Fragment fields: author, group, source, capture time and timezone, visibility, AI and external-transcription consent, processing version/status, and deletion state. `voice_notes` GridFS stores the bounded private audio object; `voice_transcripts` stores author-only transcript review state and word offsets. Private image/video content is kept in group-scoped GridFS. New fragments remain private and AI processing stays off unless the member explicitly opts in. The `fragment_analyses` collection stores the analysis contract/version, configured Gemma model tag, a source-content digest, and evidence references.
+MongoDB stores canonical Fragment fields: author, group, source, capture time and timezone, visibility, AI and external-transcription consent, processing version/status, and deletion state. `voice_notes` GridFS stores the bounded audio object; `voice_transcripts` stores author-only transcript review state and word offsets until approval. Private image/video bytes are kept in group-scoped GridFS and exposed only through authenticated group routes. AI processing stays off unless the member explicitly opts in. The `fragment_analyses` collection stores the analysis contract/version, configured Gemma model tag, a source-content digest, and evidence references.
 
-ElevenLabs is disabled by default and requires an API key plus non-zero, bounded monthly seconds and request caps. Only the selected WAV file is sent. The author must explicitly consent, then review/edit the returned transcript before group visibility or Gemma processing. No provider retry is automatic, avoiding duplicate charges. Any pre-existing objects in a former bucket require manual cleanup.
+ElevenLabs is disabled by default and requires an API key plus non-zero, bounded monthly seconds and request caps. Only the selected WAV file is sent. The author must explicitly consent, then review/edit the returned transcript before transcript visibility in the group or Gemma processing. No provider retry is automatic, avoiding duplicate charges. Any pre-existing objects in a former bucket require manual cleanup.
 
 ## 2. Observation: Gemma sees
 

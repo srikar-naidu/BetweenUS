@@ -10,6 +10,7 @@ import { FragmentPrivacyControls } from "@/components/fragment-privacy-controls"
 import { FragmentComposer } from "@/components/fragment-composer";
 import { GroupInvitePanel } from "@/components/group-invite-panel";
 import { VoiceTranscriptReview } from "@/components/voice-transcript-review";
+import { AudioWaveform } from "@/components/audio-waveform";
 import Image from "next/image";
 
 export type GroupFragmentView = Omit<Fragment, "storageUri"> & {
@@ -888,10 +889,9 @@ export function GroupDetail({
                     <span aria-hidden="true" />{contributorLabels.get(fragment.authorUserId) ?? "Group member"}
                   </p>
                   {fragment.type === "voice" && fragment.source === "upload" && (
-                    <audio
-                      controls
-                      preload="none"
+                    <AudioWaveform
                       src={`/api/groups/${groupId}/fragments/${fragment.id}/audio`}
+                      label={fragment.caption ? `Audio: ${fragment.caption}` : "Group audio post"}
                     />
                   )}
                   {((fragment.type === "image" || fragment.type === "video")
@@ -918,7 +918,9 @@ export function GroupDetail({
                     )}
                   {fragment.aiProcessingConsent && (
                     <p className="fragment-processing-status" role="status">
-                      {fragment.status === "needs_review"
+                      {fragment.type === "voice" && !fragment.transcriptReviewedAt
+                        ? "Gemma waits until you review the transcript; the audio itself is not sent."
+                        : fragment.status === "needs_review"
                         ? "Gemma observations are ready for review; they are not verified facts."
                         : fragment.processingJobStatus === "queued" ||
                             fragment.processingJobStatus === "running" ||
@@ -976,6 +978,7 @@ export function GroupDetail({
                     <VoiceTranscriptReview
                       groupId={groupId}
                       fragmentId={fragment.id}
+                      initialAiConsent={fragment.aiProcessingConsent}
                       onApproved={(updated) => {
                         setFragments((current) => current.map((item) =>
                           item.id === updated.id ? updated : item,

@@ -10,7 +10,7 @@ import {
   validateGroupMedia,
   validateMediaCaption,
 } from "@/lib/ingestion/media-validation";
-import { isFragmentVisibility, validateVoiceCaptureMetadata } from "@/lib/ingestion/voice-validation";
+import { validateVoiceCaptureMetadata } from "@/lib/ingestion/voice-validation";
 import { getMongoDatabase } from "@/lib/db/mongodb";
 import { getTemporalClient, startFragmentWorkflow, TemporalConfigurationError } from "@/lib/processing/temporal-client";
 import {
@@ -102,10 +102,7 @@ export async function POST(
       capturedAt: request.headers.get("x-captured-at") ?? "",
       capturedTimeZone: request.headers.get("x-captured-time-zone") ?? "",
     });
-    const visibilityValue = request.headers.get("x-fragment-visibility");
-    if (!isFragmentVisibility(visibilityValue)) {
-      throw new FragmentInputError("Choose who can see this post");
-    }
+    const visibilityValue = "group" as const;
     const encodedCaption = request.headers.get("x-fragment-caption") ?? "";
     if (encodedCaption.length > MAX_MEDIA_CAPTION_CHARACTERS * 3) {
       throw new FragmentInputError("Captions must be 1,000 characters or fewer");
