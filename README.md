@@ -1,122 +1,137 @@
 # Between Us
 
-Between Us is a private shared-memory system for reconstructing the moments a group of friends actually experienced together from the tiny fragments each person captured independently. Instead of treating photos as the primary object, the system treats a real-world moment as the primary unit of understanding.
+**Between Us turns the small things people capture into shared memories.**
 
-## Problem
+Friends rarely record the same event from the same perspective. Between Us brings together each member's fragments, finds the details they have in common, and helps a group reconstruct what happened—with evidence and uncertainty kept visible.
 
-Most shared-photo products answer: “What did my friends post?”
+It is not a chatbot or a conventional shared-photo feed. The central unit is the **Moment**: a possible real-world event supported by fragments from the group.
 
-Between Us answers: “What actually happened between all these fragments?”
+## Product demo
 
-Friends rarely document an event completely. Different people remember different details, but nobody recorded the full story in one place.
+Watch the product walkthrough:
 
-Between Us discovers those relationships, reconstructs the likely moment, and preserves evidence and uncertainty instead of inventing certainty.
+<p align="center">
+  <video src="https://github.com/srikar-naidu/BetweenUS/raw/refs/heads/main/public/video.mp4" controls muted playsinline width="100%">
+    Your Markdown viewer does not support embedded video. <a href="https://github.com/srikar-naidu/BetweenUS/raw/refs/heads/main/public/video.mp4">Watch or download the Between Us demo</a>.
+  </video>
+</p>
 
-## Why it differs from a normal shared album
+The video is also available in the repository at [`public/video.mp4`](public/video.mp4).
 
-The product is not a gallery, a social feed, or an AI recap generator. It is a memory reconstruction system.
+## How it works
 
-The key abstraction is:
+```text
+Fragment → Observation → Context → Reasoning → Moment / Story
+```
 
-- Fragment: one captured piece of information
-- Moment: a reconstructed real-world event from multiple fragments
-- Story: a recurring pattern or relationship across multiple moments over time
+1. Members add text, photos, short videos, or optional voice notes to a group album.
+2. A durable background worker analyzes eligible group-visible fragments. Gemma produces structured observations, not captions or free-form chat.
+3. Retrieval creates a small context packet from relevant, authorized evidence. The full database is never sent to the model.
+4. The system proposes possible shared Moments and cites the fragments behind its claims.
+5. Members review, correct, and confirm candidates. Confirmed Moments can be used to create an editable event recap.
 
-The user experience is designed to answer: “We forgot this happened,” not “Here is a pretty AI recap.”
+The app also includes a weekly Home journal, Friends discovery, group albums, private album covers, Moment review, optional story narration, and generated background music.
 
-The signed-in experience also includes a weekly Home journal, Friends discovery, and Albums. Each group is an album; a friend connection alone never shares a person's posts or grants album access. Group owners and admins can upload a private JPEG, PNG, or WebP album cover (up to 12 MB); without one, the latest group-visible photo/video remains the automatic cover. Members can optionally let others find them by name. An album's Event story is a separate, editable recap built only from its currently member-visible, confirmed Moments; members choose which Moments to include and can edit the text before saving.
+## Product principles
 
-Event stories are generated asynchronously through the MongoDB-backed background worker. Gemma is the primary writer and uses current, consented fragment observations supporting selected confirmed Moments: image observations, sampled video-frame observations, and author-reviewed voice transcripts. The story is returned as cited sections, and the application validates every evidence reference before saving. If Gemma's runtime is unavailable, the same authorized context produces a deterministic chronological recap from confirmed Moment titles and summaries, with the same fragment citations; it is labeled as a basic recap rather than a Gemma-written story. Invalid Gemma story claims are still rejected, and if an observation is missing, stale, or consent was revoked, generation fails instead of filling the gap. Raw voice recordings are not sent to Gemma. On the saved story page, members can explicitly request a narrated audio version with a generated instrumental score. The story text is sent to ElevenLabs only after the requesting member confirms that external processing; the music prompt is generic and contains no story details. Generated audio is group-authorized, stored in private GridFS, and queued asynchronously.
+- **Evidence first:** generated claims must cite authorized source fragments. Unsupported Gemma output is rejected.
+- **Uncertainty stays visible:** a candidate is not presented as a confirmed fact until members review it.
+- **Group boundaries matter:** a friend connection does not grant access to another group's memories.
+- **Private media stays private:** image and video bytes go only to the configured internal Gemma runtime. Raw voice recordings are never sent to Gemma.
+- **Consent is specific:** voice transcription and external story narration require separate user consent.
+- **Graceful story fallback:** Gemma is the primary event-story writer. If its runtime is unavailable, the app can create a clearly labeled chronological recap from already-confirmed Moments and their cited sources. Invalid model output and missing or ineligible evidence still fail closed.
+- **Async by default:** uploads persist first and are processed by a MongoDB-backed worker, so slow inference does not hold the upload request open.
 
-## Core user experience
+## Architecture
 
-1. Multiple people contribute text fragments from the same period.
-2. The system groups likely related fragments.
-3. The AI reasons over only relevant candidate context.
-4. The system surfaces a probable moment with evidence.
-5. Users can inspect why the system connected the fragments.
-6. Over time, recurring stories and hidden connections are surfaced.
+| Concern | Technology | Responsibility |
+| --- | --- | --- |
+| Web application | Next.js App Router, React, TypeScript | Albums, fragments, Moments, stories, and APIs |
+| Authentication | Better Auth, Google OAuth | Sign-in, sessions, and group membership |
+| Canonical data and queue | MongoDB Atlas | Fragments, permissions, Moments, jobs, and private GridFS media |
+| Retrieval | Tiger Data | Derived temporal and lexical search for relevant group-visible evidence |
+| AI inference | Gemma 4 E2B through `GemmaService` | Structured observations and bounded reconstruction |
+| Local AI runtime | Ollama on the developer's machine | Local development and testing only |
+| Production AI runtime | Private Ollama service on Render | Gemma inference inside the deployment environment |
+| Shared approved memory | Backboard | Group-enabled memory populated from member-approved corrections |
+| Optional voice and music | ElevenLabs | Consent-gated transcription and story narration/music |
+| Observability | Sentry | Privacy-scrubbed application and worker diagnostics |
+| Hosting and jobs | Render web service, worker, and private service | Public app, asynchronous processing, and private Gemma runtime |
 
-## Architecture overview
+Production never connects to a developer's computer. The application uses the `GemmaService` contract rather than depending on Render-specific inference code, so another private Gemma runtime can be added later without rewriting the memory pipeline.
 
-The inference interface is portable; the runtime changes by environment:
+## Run locally
 
-- Development AI layer: Gemma 4 E2B via local Ollama
-- Render AI layer: Gemma 4 E2B via a dedicated private Ollama service
-- Application DB: MongoDB Atlas
-- Retrieval layer: Tiger Data for temporal and lexical candidate search; vectors are deferred until an embedding model is selected
-- Persistent, confirmed group memory: Backboard, populated only by member-approved corrections
-- Opt-in voice transcription and story narration/music: ElevenLabs, with explicit consent and monthly caps
-- Durable processing: MongoDB-backed job queue and separate Render worker
-- Privacy-scrubbed observability: Sentry
-- Deployment: Render
-- Bounded model-specialization experiment: Tinker, compared against Gemma; not the default runtime
+### Requirements
 
-## Gemma runtime
+- Node.js `20.19+`, `22.12+`, or `23.2+`
+- npm
+- MongoDB Atlas (or an appropriately configured MongoDB deployment)
+- Tiger Data/Postgres for retrieval
+- Ollama with the Gemma 4 E2B model for local AI processing
+- Google OAuth credentials to use sign-in
 
-The application uses Gemma 4 E2B through `GemmaService`. Local development talks to the developer's Ollama at `http://localhost:11434`; Render runs a separate Ollama service on Render's private network. The production worker never falls back to localhost or a developer machine.
+### 1. Install dependencies and configure environment
 
-Install Ollama, then pull and run the supported E2B model:
+```powershell
+npm ci
+Copy-Item .env.example .env.local
+```
+
+Fill in the required values in `.env.local`. Do not commit this file or put server secrets in `NEXT_PUBLIC_` variables.
+
+At minimum, configure:
+
+| Variable | Purpose |
+| --- | --- |
+| `MONGODB_URI`, `MONGODB_DB_NAME` | Canonical data, sessions, private media, and durable jobs |
+| `TIGER_DATABASE_URL` | Derived retrieval index |
+| `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | Session signing and application origin |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google sign-in |
+| `GEMMA_RUNTIME=local` | Select the local development adapter |
+| `OLLAMA_HOST=http://localhost:11434` | Local Ollama address |
+| `GEMMA_MODEL=gemma4:e2b` | Gemma model name |
+| `GEMMA_TIMEOUT_MS=300000` | Inference timeout |
+
+See [`.env.example`](.env.example) for optional Backboard, ElevenLabs, and Sentry settings.
+
+### 2. Start local Gemma
+
+Install Ollama, then download and start the supported model:
 
 ```powershell
 ollama pull gemma4:e2b
 ollama run gemma4:e2b
 ```
 
-The installed Ollama Gemma 4 `/api/chat` integration accepts text and image inputs and supports JSON Schema-constrained responses. Although Gemma 4 E2B itself has native audio capability, this Ollama chat API does not expose raw audio input. Between Us therefore does not claim to analyze a voice recording directly: audio is processed only if its author separately opts in to ElevenLabs transcription, or enters/edits a transcript manually, and then reviews that transcript before Gemma analyzes the text. Gemma extracts uncertain, source-linked observations and evaluates bounded retrieval context; it is not used as a chatbot or caption generator.
+Keep Ollama running while testing AI features. The local app's processing worker must be able to reach `OLLAMA_HOST`.
 
-## Setup overview
+### 3. Prepare retrieval and start the app
 
-The application foundation uses Next.js App Router and TypeScript on Node.js 20.19+, 22.12+, or 23.2+. Better Auth provides Google OAuth and MongoDB-backed group membership; all group data routes verify the server session and membership. MongoDB Atlas owns canonical fragment and moment records. Tiger Data stores a derived, group-visible retrieval projection.
+Apply both SQL migrations to the Tiger Data database:
 
-`src/lib/ai/gemma-provider.ts` owns the `GemmaService` interface, the shared Ollama protocol adapter, and the `LocalGemmaAdapter`/`RenderGemmaAdapter` runtime choices. Set `GEMMA_RUNTIME=local` for development (the default outside production), `OLLAMA_HOST=http://localhost:11434`, `GEMMA_MODEL=gemma4:e2b`, and `GEMMA_TIMEOUT_MS=300000`. The adapter sets temperature to zero and caps requests at 4,096 context tokens and 2,048 generated tokens. Observation extraction disables optional thinking for lower CPU latency; bounded Moment reconstruction enables it. Structured response schemas and all source/evidence checks are validated again in application code before persistence.
+```text
+migrations/tiger/001_fragment_search.sql
+migrations/tiger/002_fragment_analysis_search.sql
+```
 
-Set `MONGODB_URI` and `TIGER_DATABASE_URL` for database access. See `.env.example` for the expected variables. Apply `migrations/tiger/001_fragment_search.sql` and `migrations/tiger/002_fragment_analysis_search.sql` to the selected Tiger database before retrieval is used.
+Then run the web app and background worker together:
 
-Authentication also requires `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `GOOGLE_CLIENT_ID`, and `GOOGLE_CLIENT_SECRET`. Configure the Google OAuth callback as `/api/auth/callback/google`. Without these values, sign-in and group data APIs fail closed; there is no development impersonation mode.
+```powershell
+npm run dev
+```
 
-Run locally with `npm install`, then `npm run dev`. This starts both Next.js and the MongoDB queue worker; stop the dev command to stop both. `npm run worker` remains available when you intentionally want to run only the worker. `npm test`, `npm run typecheck`, and `npm run build` provide the current verification gates.
+Open `http://localhost:3000`. `npm run dev` starts the Next.js server and MongoDB worker; stop the command to stop both. To run only the worker, use `npm run worker`.
 
-## MongoDB background worker
+### Useful checks
 
-The app supports text fragments, short private WAV voice notes, private photo uploads (JPEG/PNG/WebP up to 12 MB), and short video uploads (MP4/WebM up to 25 MB). Photo/video media is stored in a private MongoDB GridFS bucket and served only after group membership and fragment visibility checks. Every group-visible text, photo, and video post is automatically queued for Gemma analysis. The background worker loads an image or at most six sampled video frames and sends those bytes only to the configured internal Gemma runtime. It stores bounded observations, not duplicate media or captions. Video frames are transient processing inputs. Voice audio uses its own private GridFS bucket and is never sent to Gemma. Previously stored objects in any legacy bucket are not deleted by this app and must be cleaned up manually.
+```powershell
+npm test
+npm run typecheck
+npm run build
+```
 
-Group posting starts from one Post action and supports text, photo, audio, or video. New posts are visible to members of that group; the composer does not ask for an audience setting or per-post Gemma checkbox. A privacy notice explains that Gemma automatically analyzes group-visible posts; contributors can pause or resume analysis afterward in the post's privacy controls. When a member opens a group, eligible older group-visible posts are also queued for analysis. For audio, the raw recording is group-visible but is never sent to Gemma; ElevenLabs transcription has separate explicit consent, and the author reviews the transcript before sharing it and triggering automatic Gemma analysis of the approved text. Image/video previews and an audio waveform/player are shown in the composer and group feed.
-
-The upload request persists the fragment and its MongoDB job, then returns without waiting for inference. A separate worker polls the durable collections, atomically claims one job at a time, and uses renewable leases; stale claims can be recovered after a worker interruption. Gemma inference therefore does not hold the upload request open. The group UI renders validated tentative observations and quoted evidence when available, without presenting queued/running as Gemma output; failures remain visible and can be retried. For visual outputs, people, entities, and hints are derived from validated observations, visual confidence is capped at 0.7, and one repair attempt is made if the first model output fails validation. Only active, group-visible, analysis-enabled observations are indexed in Tiger. Locally, `npm run dev` starts both the web app and the worker, avoiding the common stale-queue issue caused by running only Next.js. Render continues to run a separate worker service. MongoDB is the durable queue and canonical job store, so production does not depend on an always-on developer computer or a separate orchestration service.
-
-Text capture requires MongoDB. Automatic analysis requires MongoDB, the configured Ollama/Gemma service, and Tiger Data for group-visible projections. If the worker is temporarily unavailable, jobs remain queued in MongoDB; a failed Gemma call leaves the original fragment stored, records a safe failure category, and allows retry. Do not put model-service credentials in `NEXT_PUBLIC_` variables.
-
-Voice-note uploads require mono 16-bit PCM WAV at 16 kHz, up to 60 seconds/2 MB. The recording is group-visible, while any transcript stays private until the author reviews/edits and approves it for sharing; Gemma automatically analyzes the approved text. Sending audio to ElevenLabs for transcription remains separately opt-in and explicit. ElevenLabs transcription is enabled for the local configuration with hard caps of 3,600 audio seconds and 60 requests per UTC month. Story audio generation is capped at 10 combined narration-and-music exports per month; each story is limited to 3,500 characters. Configure the server key with **Speech to Text**, **Text to Speech**, and **Music** generation access only. Leave voice cloning, voice design, conversational AI, and unrelated endpoints disabled. Story narration is user-triggered and requires a separate explicit consent checkbox; voice recordings never enter this path.
-
-Members can request Moment reconstruction from an eligible group-visible fragment. Retrieval first builds a small `ContextPacket` from MongoDB/Tiger Data and, when the group has enabled its shared-memory space, up to three confirmed Backboard corrections. The entire database is never sent to Gemma. The server validates cited evidence and derives uncertainty, and group members can review candidates, correct or remove evidence, and confirm moments. Members can also request a background Story connection analysis across at most eight relevant confirmed Moments. Its compact packet contains only their summaries, current authorized observations, timestamps, and source IDs; candidates remain `possible` until a group member confirms them. Story jobs are group-scoped, idempotent MongoDB jobs and never block uploads. Merge actions require MongoDB transaction support. Backboard is the group's persistent memory for corrections: an owner/admin enables the group's memory space, and members explicitly share each correction on a confirmed Moment. Set `BACKBOARD_API_KEY` on the server/Render web service; only member-approved corrections are persisted there, and read-only searches use brief summaries/entities from eligible group-visible fragments. Raw media and raw source text are not sent to Backboard. Disabling Backboard or deleting a group removes the group's Backboard assistant and Story records/jobs.
-
-## Phase 9 evaluation and deployment preparation
-
-Run `npm run evaluate:phase9` for the deterministic synthetic acceptance report. It contains 84 generated fragments across development and held-out event/group splits, with same-place and same-people near-neighbors, misleading text, single-contributor evidence, synthetic mixed-modality labels, and insufficient-evidence examples. The report measures retrieval false merges/misses and exercises server evidence validation against private and foreign-group IDs. It contains no real participant content and is not a model-quality or pilot-performance claim. Set an explicit acceptable pilot false-merge threshold before launch.
-
-`render.yaml` defines separate Render web and MongoDB queue-worker services plus a private Ollama/Gemma service. The blueprint does not deploy automatically. `/api/health` checks application liveness only, not model readiness. Before enabling production processing, an operator must supply credentials and verify MongoDB/Tiger access, model startup and inference, Google OAuth callbacks, worker recovery, deletion behavior, provider terms/cost limits, available Render credits, and the pilot invite list.
-
-For the initial Render Blueprint setup, provide these `sync: false` values:
-
-- Web service: `MONGODB_URI`, `TIGER_DATABASE_URL`, `BETTER_AUTH_SECRET` (at least 32 bytes), `BETTER_AUTH_URL` (the final public HTTPS URL for the web service), `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `BACKBOARD_API_KEY`, `ELEVENLABS_API_KEY`, `SENTRY_DSN`, and `NEXT_PUBLIC_SENTRY_DSN`.
-- Background worker: the same `MONGODB_URI`, `TIGER_DATABASE_URL`, `BACKBOARD_API_KEY`, `ELEVENLABS_API_KEY`, and server `SENTRY_DSN`.
-
-The worker and web service must use the same MongoDB and Tiger Data databases. In Google Cloud OAuth, add `${BETTER_AUTH_URL}/api/auth/callback/google` as an authorized redirect URI. Allow Render's outbound connections in MongoDB Atlas and Tiger Data network settings; a developer-PC IP allowlist entry does not permit production access. The Gemma disk persists pulled weights, so later restarts do not need to download the model again. On the first deploy, wait for the `betweenus-gemma` logs to report a successful `gemma4:e2b` pull before submitting image or video posts. The local app's generic “Gemma could not be reached” notice describes a local worker/runtime connection failure and does not use the developer's Ollama in Render.
-
-### Render Gemma capacity and limitations
-
-The `betweenus-gemma` Render private service uses the `4c-16g` compute plan (4 CPU, 16 GB RAM) and a 20 GB persistent disk for Ollama's model cache. This provides headroom for the quantized Gemma 4 E2B weights and a 4K context; CPU-only inference will be noticeably slower than a GPU and this single-model service is intended for a small demo, not concurrent high-throughput use. The web and MongoDB queue worker are separate, small services and talk to Gemma over Render's private network; `OLLAMA_HOST` is populated from the private service reference, not a developer-supplied URL. Render does not expose this model service on the public internet. Ollama 0.35.1 is pinned in the Dockerfile, and startup pulls `gemma4:e2b` only when it is absent from the persistent disk.
-
-The selected compute has enough headroom for a CPU-only demo based on Gemma's published Q4_0 static-weight estimate (about 2.9 GB) and Ollama's current E2B package size (about 7.5 GB on disk). Static-weight figures exclude the runtime and context/KV cache; actual peak RAM and disk use must still be observed after startup on Render. The persistent disk has room for that model plus runtime/download overhead. This is a conservative starting point, not a benchmark or a latency guarantee. There is no GPU: cold pulls/load and inference can be slow, requests are serialized, and each prompt is bounded to a 4K context. Monitor CPU, peak RAM, disk, and inference latency in Render before inviting a pilot group; do not increase context or parallel inference without measuring first.
-
-Local smoke-test measurements on the developer machine: a warm CPU-only observation previously took 41.6 seconds; the latest cold structured-observation test took 113 seconds total (about 61 seconds loading, 170 output tokens). `ollama ps` previously reported 970 MB loaded for the locally installed Q4_K_M E2B model. These are single synthetic requests on developer hardware, not a Render performance or peak-memory result; allow for minute-scale results on CPU.
-
-Render config sets `OLLAMA_NO_CLOUD=1`, `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_MAX_LOADED_MODELS=1`, and a 5-minute keep-alive. Render plans/costs and available credits are account-specific; this repo cannot verify the account balance or perform a live deployment. The local developer PC, its GPU/RAM, and its network are not part of production capacity or availability.
-
-### Testing the live local model
-
-Run the opt-in live model test after starting local Ollama and pulling the model:
+The standard tests use deterministic fixtures and do not need credentials or a running model. To run the opt-in local Gemma integration tests:
 
 ```powershell
 $env:RUN_GEMMA_INTEGRATION = "true"
@@ -124,36 +139,91 @@ npx tsx --test tests/gemma-local.integration.test.ts
 Remove-Item Env:RUN_GEMMA_INTEGRATION
 ```
 
-The normal test suite uses deterministic fake responses and does not need Ollama, credentials, or private media.
+Image inference on CPU can take minutes. Ensure Ollama is running and the model is installed before interpreting a local “Gemma could not be reached” error; production uses its own Render runtime.
 
-### Future GPU portability
+## AI and background processing
 
-The memory pipeline depends only on `GemmaService.generateStructured`, not Render, Ollama networking, or a GPU implementation. A future `RemoteGemmaAdapter` can implement the same interface for a separately approved, private Gemma 4 E2B deployment. Keep that endpoint private, retain schema/evidence validation in the application, and never replace it with a hosted LLM or send private media to a third-party model API.
+### Fragment analysis
 
-References: [Gemma 4 capabilities and inference memory](https://ai.google.dev/gemma/docs/core), [Ollama Gemma 4 model](https://ollama.com/library/gemma4), [Ollama chat API](https://docs.ollama.com/api/chat), [Ollama Docker runtime](https://docs.ollama.com/docker), [Render compute plans](https://render.com/docs/compute-plans), [Render private services](https://render.com/docs/private-services), [Render persistent disks](https://render.com/docs/disks), and [Render background workers](https://render.com/docs/background-workers).
+Group-visible text, images, and videos are queued for analysis. Gemma receives the relevant text or image/frame bytes and returns schema-constrained observations. The server validates the response and provenance before storing it. Visual confidence is capped, and video processing samples at most six frames. Unchanged media can reuse a validated observation rather than trigger another inference.
 
-Sentry is enabled for the local configuration and Render blueprint when the server and browser DSNs are present. It reports application/worker failures and sampled operation latency, including safe operation names for Backboard retrieval/sync and ElevenLabs narration/music generation. The SDK disables identity, cookies, headers, request/response bodies, query parameters, GenAI content, database payloads, queue arguments, local variables, and replay. Event and span hooks replace exception details and remove request/context/attribute data; no source maps are uploaded. Provider failures are tagged only with an allowlisted category; Sentry never receives story text, audio, media, credentials, group IDs, or raw provider responses. `sendDefaultPii` is disabled and the event scrubber removes the SDK's user/IP fields, but Sentry may infer a visitor IP from the network connection at ingestion; disable IP-address storage in the Sentry project’s Security & Privacy settings as well.
+Voice uploads are not submitted to Gemma. A member may separately opt into ElevenLabs transcription; the author must review and approve the transcript before the text can enter the memory pipeline.
 
-## Documentation set
+### Moments and stories
 
-The product and architecture planning documents are:
+Moment reconstruction uses a compact, authorized evidence packet assembled from MongoDB and retrieval results. It requires corroboration from multiple contributors. Candidate Moments remain reviewable until confirmed.
 
-- PRODUCT.md
-- ARCHITECTURE.md
-- AI_PIPELINE.md
-- CONTEXT_ENGINEERING.md
-- DATA_MODEL.md
-- AI_CONTRACTS.md
-- PRIVACY.md
-- MVP.md
-- ROADMAP.md
-- DECISIONS.md
-- IMPLEMENTATION_PLAN.md
+Event-story generation runs in the background and uses selected confirmed Moments. Gemma is the primary writer and returns evidence-linked sections. If the configured Gemma provider is unavailable, the worker builds a deterministic, chronological recap from confirmed Moment titles and summaries. The UI labels that fallback clearly. Invalid model output, missing observations, stale evidence, revoked consent, and unauthorized sources are not replaced by invented content.
 
-## What is intentionally excluded from the first build
+### Optional integrations
 
-The MVP does not include public social features, comment systems, generic AI chat, or polished recap generation. Members can contribute text, group-visible photos, short videos, and optional bounded WAV voice notes. Gemma automatically analyzes group-visible text, photos, and at most six sampled frames per video; raw voice recordings are never sent to Gemma. Voice transcription is a separate explicit opt-in, and only author-reviewed transcripts can enter the memory pipeline. The system identifies likely shared Moments from eligible, evidence-backed observations and supports member-triggered, evidence-linked Story candidates across confirmed Moments.
+- **Backboard:** stores/retrieves group memory only when a group enables the integration and members approve corrections.
+- **ElevenLabs:** optional transcription and story narration/music. Transcription and sending story text externally are consent-gated. Configure only the required Speech to Text, Text to Speech, and Music permissions; do not enable voice cloning or unrelated features.
+- **Sentry:** reports scrubbed errors and operation metrics. Raw media, prompts, story content, credentials, and group identifiers are excluded by the application's privacy configuration. Disable IP-address storage in the Sentry project privacy settings too.
 
-## Definition of success
+These integrations are configured with server-side variables. Do not expose their API keys to browser code.
 
-This project is successful when multiple people independently contribute fragments from the same experience and the system can connect them into a shared moment, explain the connection, preserve uncertainty, and surface a meaningful memory without inventing false details.
+## Deploy to Render
+
+The repository includes [`render.yaml`](render.yaml), a Blueprint defining three services:
+
+1. **`betweenus-web`** — public Next.js application.
+2. **`betweenus-background-worker`** — durable MongoDB job processing.
+3. **`betweenus-gemma`** — private Ollama/Gemma inference service, reachable by the app services over Render's private network.
+
+To deploy:
+
+1. Push the desired commit to the Git branch connected to Render.
+2. In Render, create a **Blueprint** from this repository and select `render.yaml`.
+3. Provide the prompted secret values listed below; do not change the private Gemma service to a public service.
+4. Deploy the Blueprint. On the first deployment, wait for the Gemma service logs to show that `gemma4:e2b` has downloaded successfully before testing image or video analysis.
+5. Set the Google OAuth redirect URI and confirm Atlas/Tiger Data accept connections from the deployed services.
+6. Verify sign-in, worker processing, and a test image before inviting a group.
+
+### Render secrets to provide
+
+The Blueprint has `sync: false` placeholders. On initial Blueprint creation, supply:
+
+| Variable | Web | Worker |
+| --- | :---: | :---: |
+| `MONGODB_URI` | Yes | Yes |
+| `TIGER_DATABASE_URL` | Yes | Yes |
+| `BACKBOARD_API_KEY` | Yes | Yes |
+| `ELEVENLABS_API_KEY` | Yes | Yes |
+| `SENTRY_DSN` | Yes | Yes |
+| `BETTER_AUTH_SECRET` (at least 32 bytes) | Yes | — |
+| `BETTER_AUTH_URL` (final public HTTPS origin) | Yes | — |
+| `GOOGLE_CLIENT_ID` | Yes | — |
+| `GOOGLE_CLIENT_SECRET` | Yes | — |
+| `NEXT_PUBLIC_SENTRY_DSN` | Yes | — |
+
+Use the same MongoDB and Tiger Data databases for the web service and worker. Add `${BETTER_AUTH_URL}/api/auth/callback/google` as an authorized Google OAuth redirect URI. Allow production Render connections in MongoDB Atlas and Tiger Data network settings; a developer-PC IP allowlist entry is not sufficient.
+
+The model name, runtime, private service address, inference timeout, and Ollama limits are already defined in the Blueprint. Do not set `OLLAMA_HOST` to a developer machine.
+
+### Gemma resources and limits
+
+The Blueprint provisions the private Gemma service with **4 CPU, 16 GB RAM, and a 20 GB persistent disk**. The disk keeps Ollama model weights across service restarts. Gemma 4 E2B runs CPU-only on this configuration: expect serialized, potentially minute-scale inference and limited throughput. The service is intended for a small demo, not concurrent production traffic. Measure RAM, disk, CPU, and inference latency in Render before expanding usage. Render pricing and available credits depend on your account; check them in the dashboard before deploying.
+
+The app health endpoint (`/api/health`) checks web-service liveness only; it does not certify Gemma, MongoDB, or Tiger readiness. Check each service's logs and exercise an end-to-end test after the first deployment.
+
+## Repository documentation
+
+The longer product, design, and engineering documents are in [`docs/`](docs/):
+
+- [Product brief](docs/PRODUCT.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [AI pipeline](docs/AI_PIPELINE.md)
+- [AI contracts](docs/AI_CONTRACTS.md)
+- [Context engineering](docs/CONTEXT_ENGINEERING.md)
+- [Data model](docs/DATA_MODEL.md)
+- [Privacy](docs/PRIVACY.md)
+- [MVP scope](docs/MVP.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Decision log](docs/DECISIONS.md)
+- [Implementation plan](docs/IMPLEMENTATION_PLAN.md)
+- [Project reference](docs/Project.md)
+
+## Success criteria
+
+Between Us succeeds when different people can contribute fragments from the same experience and the system can connect them into a shared Moment, explain that connection with evidence, preserve uncertainty, and let the group decide what becomes a memory.

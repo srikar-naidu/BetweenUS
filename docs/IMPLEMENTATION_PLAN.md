@@ -95,7 +95,7 @@ MongoDB is authoritative. Tiger and Backboard are derived/context services that 
 
 Do this before consuming provider credits or implementing external integrations.
 
-**Current status: NOT COMPLETE.** Repository review found the following decisions already represented: Better Auth + Google OAuth is the identity path; Google callback configuration is documented in `README.md`; new fragments default to private with AI processing consent off; local Gemma is the default; and the current home screen/CSS establish an initial screen and token direction. See `DECISIONS.md` Decision 12 for the additional Phase 0 defaults locked during this review.
+**Current status: NOT COMPLETE.** Repository review found the following decisions already represented: Better Auth + Google OAuth is the identity path; Google callback configuration is documented in [`../README.md`](../README.md); new fragments default to private with AI processing consent off; local Gemma is the default; and the current home screen/CSS establish an initial screen and token direction. See `DECISIONS.md` Decision 12 for the additional Phase 0 defaults locked during this review.
 
 The following exit-gate items remain unverified and must be completed by an operator with access to the provider accounts before any external provider is enabled or any real personal media is sent:
 
@@ -308,4 +308,4 @@ Build and test the UI shell alongside the first four engineering phases. ElevenL
 - [ElevenLabs speech-to-text API](https://elevenlabs.io/docs/api-reference/speech-to-text/convert) and [model capabilities](https://elevenlabs.io/docs/overview)
 - [Sentry for Next.js](https://docs.sentry.io/platforms/javascript/guides/nextjs/) and [data collection options](https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/)
 - [TabPFN capabilities](https://docs.priorlabs.ai/), [Entire agent integrations](https://docs.entire.io/agents/overview), and [Mastra workflows](https://mastra.ai/docs/workflows/overview)
-- [Next.js local documentation](node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/route.md)
+- [Next.js local documentation](../node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/route.md)

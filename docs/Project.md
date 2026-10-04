@@ -927,7 +927,7 @@ Do not present Copilot as part of the runtime architecture.
 
 Before implementation, create these Markdown files.
 
-### `README.md`
+### [`README.md`](../README.md)
 
 Explain:
 
@@ -1698,7 +1698,7 @@ Inspect the local Gemma installation and determine what runtime/API is available
 Create:
 
 ```text
-README.md
+../README.md
 PRODUCT.md
 ARCHITECTURE.md
 AI_PIPELINE.md
