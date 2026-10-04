@@ -4,6 +4,7 @@ import type { Collection, Db, Filter } from "mongodb";
 import type {
   Fragment,
   Moment,
+  MomentReviewEvent,
   NewFragment,
   NewMoment,
 } from "@/lib/domain/memory";
@@ -26,7 +27,27 @@ function asFragment(document: FragmentDocument): Fragment {
 
 function asMoment(document: MomentDocument): Moment {
   const { _id, ...moment } = document;
-  return { ...moment, id: _id };
+  return {
+    ...moment,
+    id: _id,
+    reviewHistory: moment.reviewHistory ?? [],
+    corrections: moment.corrections ?? [],
+    revision: moment.revision ?? 0,
+    mergedIntoMomentId: moment.mergedIntoMomentId ?? null,
+  };
+}
+
+function expectedRevisionFilter(revision: number): Filter<MomentDocument> {
+  return revision === 0
+    ? { $or: [{ revision: 0 }, { revision: { $exists: false } }] }
+    : { revision };
+}
+
+export class MomentReviewConflictError extends Error {
+  constructor() {
+    super("Moment changed while the review action was being saved");
+    this.name = "MomentReviewConflictError";
+  }
 }
 
 export class MongoMemoryRepository {
@@ -116,6 +137,23 @@ export class MongoMemoryRepository {
       $or: [{ visibility: "group" }, { authorUserId: userId }],
     });
     return document ? asFragment(document) : null;
+  }
+
+  async findEligibleGroupVisibleFragmentsByIds(
+    groupId: string,
+    fragmentIds: readonly string[],
+  ): Promise<Fragment[]> {
+    if (!fragmentIds.length) return [];
+    const documents = await this.fragments.find({
+      _id: { $in: [...fragmentIds] },
+      groupId,
+      type: "text",
+      source: "text",
+      visibility: "group",
+      aiProcessingConsent: true,
+      deletionState: "active",
+    }).toArray();
+    return documents.map(asFragment);
   }
 
   async updateFragmentStatus(
@@ -373,6 +411,102 @@ export class MongoMemoryRepository {
     );
     const stored: MomentDocument = { _id: id, ...document };
     return asMoment(stored);
+  }
+
+  async insertMomentIfAbsent(moment: Moment): Promise<Moment> {
+    const { id, ...document } = moment;
+    await this.moments.updateOne(
+      { _id: id },
+      { $setOnInsert: { _id: id, ...document } },
+      { upsert: true },
+    );
+    const stored = await this.moments.findOne({ _id: id, groupId: moment.groupId });
+    if (!stored) throw new Error("Idempotent Moment result could not be read");
+    return asMoment(stored);
+  }
+
+  async reviewMoment(input: {
+    groupId: string;
+    momentId: string;
+    expectedUpdatedAt: Date;
+    expectedRevision: number;
+    changes: Partial<Pick<
+      Moment,
+      "title" | "summary" | "status" | "uncertaintyLabel" | "uncertaintyReason" |
+      "evidence" | "corrections" | "mergedIntoMomentId"
+    >>;
+    event: MomentReviewEvent;
+  }): Promise<boolean> {
+    const result = await this.moments.updateOne(
+      {
+        _id: input.momentId,
+        groupId: input.groupId,
+        updatedAt: input.expectedUpdatedAt,
+        ...expectedRevisionFilter(input.expectedRevision),
+      },
+      {
+        $set: { ...input.changes, updatedAt: input.event.occurredAt },
+        $inc: { revision: 1 },
+        $push: { reviewHistory: input.event },
+      },
+    );
+    return result.modifiedCount === 1;
+  }
+
+  async mergeMoments(input: {
+    groupId: string;
+    sourceId: string;
+    targetId: string;
+    sourceUpdatedAt: Date;
+    targetUpdatedAt: Date;
+    sourceRevision: number;
+    targetRevision: number;
+    sourceChanges: Partial<Pick<Moment, "status" | "uncertaintyLabel" | "uncertaintyReason" | "mergedIntoMomentId">>;
+    targetChanges: Partial<Pick<
+      Moment,
+      "evidence" | "startAt" | "endAt" | "corrections" | "status" |
+      "uncertaintyLabel" | "uncertaintyReason"
+    >>;
+    sourceEvent: MomentReviewEvent;
+    targetEvent: MomentReviewEvent;
+  }): Promise<void> {
+    const session = this.database.client.startSession();
+    try {
+      await session.withTransaction(async () => {
+        const source = await this.moments.updateOne(
+          {
+            _id: input.sourceId,
+            groupId: input.groupId,
+            updatedAt: input.sourceUpdatedAt,
+            ...expectedRevisionFilter(input.sourceRevision),
+          },
+          {
+            $set: { ...input.sourceChanges, updatedAt: input.sourceEvent.occurredAt },
+            $inc: { revision: 1 },
+            $push: { reviewHistory: input.sourceEvent },
+          },
+          { session },
+        );
+        if (source.modifiedCount !== 1) throw new MomentReviewConflictError();
+        const target = await this.moments.updateOne(
+          {
+            _id: input.targetId,
+            groupId: input.groupId,
+            updatedAt: input.targetUpdatedAt,
+            ...expectedRevisionFilter(input.targetRevision),
+          },
+          {
+            $set: { ...input.targetChanges, updatedAt: input.targetEvent.occurredAt },
+            $inc: { revision: 1 },
+            $push: { reviewHistory: input.targetEvent },
+          },
+          { session },
+        );
+        if (target.modifiedCount !== 1) throw new MomentReviewConflictError();
+      });
+    } finally {
+      await session.endSession();
+    }
   }
 
   async findMoment(groupId: string, momentId: string): Promise<Moment | null> {

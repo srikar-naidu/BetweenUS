@@ -1,5 +1,6 @@
 import { apiErrorResponse } from "@/lib/api/errors";
 import { requireGroupMembership } from "@/lib/auth/group-access";
+import { momentForGroupMember, visibleMomentsForMember } from "@/lib/auth/group-visibility";
 import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
@@ -22,7 +23,12 @@ export async function GET(
     if (
       !fragment ||
       fragment.deletionState !== "active" ||
-      (fragment.visibility !== "group" && fragment.authorUserId !== session.user.id)
+      (fragment.visibility !== "group" && fragment.authorUserId !== session.user.id) ||
+      (job.jobType === "reconstruct_moment" &&
+        (fragment.type !== "text" ||
+          fragment.source !== "text" ||
+          fragment.visibility !== "group" ||
+          !fragment.aiProcessingConsent))
     ) {
       return Response.json({ error: "Processing job not found" }, { status: 404 });
     }
@@ -31,6 +37,27 @@ export async function GET(
         { status: null },
         { headers: { "Cache-Control": "no-store" } },
       );
+    }
+    if (job.jobType === "reconstruct_moment" && job.status === "succeeded" && job.outputRef) {
+      const moment = await new MongoMemoryRepository(database).findMoment(groupId, job.outputRef);
+      if (!moment) return Response.json({ error: "Reconstruction result is unavailable" }, { status: 409 });
+      if (moment.reconstruction?.validationOutcome === "insufficient_evidence") {
+        return Response.json({
+          status: job.status,
+          outcome: "insufficient_evidence",
+          reason: moment.uncertaintyReason,
+        }, { headers: { "Cache-Control": "no-store" } });
+      }
+      const visibleFragments = await new MongoMemoryRepository(database)
+        .findMemberVisibleFragments(groupId, session.user.id, 1000);
+      const [visibleMoment] = visibleMomentsForMember([moment], visibleFragments);
+      return Response.json({
+        status: job.status,
+        outcome: visibleMoment ? "candidate" : "insufficient_evidence",
+        ...(visibleMoment
+          ? { moment: momentForGroupMember(visibleMoment) }
+          : { reason: "The reconstruction result is no longer available for group review." }),
+      }, { headers: { "Cache-Control": "no-store" } });
     }
     return Response.json({
       status: job.status,
@@ -54,6 +81,12 @@ export async function POST(
     const job = await ingestion.findProcessingJob(groupId, jobId);
     if (!job || job.status !== "failed") {
       return Response.json({ error: "A failed processing job was not found" }, { status: 404 });
+    }
+    if (job.jobType === "reconstruct_moment") {
+      return Response.json(
+        { error: "Start a new reconstruction request to retry this job" },
+        { status: 410 },
+      );
     }
     if (
       job.jobType === "delete_fragment" &&

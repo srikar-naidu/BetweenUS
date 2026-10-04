@@ -109,6 +109,10 @@ Temporal owns text ingestion, observation, retrieval/reconstruction, deletion cl
 
 Mastra is not a durable job store. Sentry should trace workflow steps, Gemma calls, retrieval, optional scoring, provider calls, latency, and failures using scrubbed operation names and opaque IDs. Disable request bodies, media, prompts/completions, transcripts, direct identity, session replay, and sensitive span attributes. A telemetry failure must not affect processing.
 
-## Current demo boundary
+## Current production and demo boundary
 
-The synthetic demo creates a candidate from seeded fragments, applies a bounded time/lexical retrieval, validates cited evidence, requires multiple fragments/authors, and derives uncertainty. It is not the production ingestion workflow and has no user-media access. Text-fragment ingestion schedules processing jobs, but the complete Gemma Observation -> retrieval -> Moment convergence chain remains subsequent work.
+The group page queues member-triggered, text-only Moment reconstruction as an idempotent Temporal workflow for active, group-visible, AI-consented fragments. Workflow history contains opaque group, fragment, job, and requester IDs only; the worker rechecks active membership before fetching authorized context. The production path builds a bounded ContextPacket, asks Gemma for candidate evidence/contradiction/missing-evidence notes, rechecks source eligibility before persistence, validates cited IDs/quotes/relationships, derives uncertainty deterministically, and persists the result with model/retrieval/validation provenance. The UI polls the job for a reviewable result. Insufficient evidence is persisted as an `unknown` draft and is not shown as a candidate.
+
+Group members can confirm, reject, merge, correct a person/place/reference, undo the latest correction, and remove evidence. These actions append actor/time/before/after snapshots. Merge writes require MongoDB transactions. Backboard sync is not part of this phase and no corrections are sent to it.
+
+The separate synthetic demo still uses seeded examples and is not the production ingestion workflow. Live Gemma, MongoDB, and transaction behavior have not been verified by the unit tests; only synthetic fixtures exercise the deterministic contracts.

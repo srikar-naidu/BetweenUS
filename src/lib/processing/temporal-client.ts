@@ -71,6 +71,24 @@ export async function startFragmentWorkflow(
   job: ProcessingJob,
   workflowType: "processFragmentWorkflow" | "deleteFragmentWorkflow",
 ): Promise<string> {
+  return startWorkflow(job, workflowType);
+}
+
+export async function startMomentReconstructionWorkflow(
+  job: ProcessingJob,
+  requesterUserId: string,
+): Promise<string> {
+  if (job.jobType !== "reconstruct_moment") {
+    throw new TypeError("Moment reconstruction workflows require a reconstruction job");
+  }
+  return startWorkflow(job, "reconstructMomentWorkflow", requesterUserId);
+}
+
+async function startWorkflow(
+  job: ProcessingJob,
+  workflowType: "processFragmentWorkflow" | "deleteFragmentWorkflow" | "reconstructMomentWorkflow",
+  requesterUserId?: string,
+): Promise<string> {
   const { client, settings } = await getTemporalClient();
   const workflowId = `between-us-${job.id}-attempt-${job.attemptCount + 1}`;
   try {
@@ -81,6 +99,9 @@ export async function startFragmentWorkflow(
         jobId: job.id,
         groupId: job.groupId,
         fragmentId: job.fragmentId,
+        ...(workflowType === "reconstructMomentWorkflow" && requesterUserId
+          ? { requesterUserId }
+          : {}),
       }],
       workflowExecutionTimeout: "30 minutes",
     });

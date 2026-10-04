@@ -37,6 +37,37 @@ The system should prefer JSON contracts that can be validated before storing or 
 
 Phase 3 adds server-owned `analysis_version`, configured `model_version`, `source_text_sha256`, and `analyzed_at` provenance when persisting this contract. The current implementation accepts text fragments only. Fact values must appear inside their exact evidence spans, summaries must be exact source excerpts, and literal people/entity phrases must appear in the source text; the model cannot emit `likely` or `confirmed`.
 
+## Contract: MomentReconstructionProposal
+
+Gemma proposes evidence and notes only; it does not return an uncertainty label or confirmation state.
+
+```json
+{
+  "title": "string|null",
+  "summary": "string",
+  "confidence": 0.0,
+  "evidence": [
+    {
+      "fragment_id": "authorized context-packet fragment ID",
+      "relationship": "temporal|shared_people|shared_location|semantic_similarity|entity_overlap"
+    }
+  ],
+  "contradictions": [
+    {
+      "summary": "string",
+      "evidence": [
+        { "fragment_id": "authorized context-packet fragment ID", "quote": "exact stored observation quote" }
+      ]
+    }
+  ],
+  "missing_evidence": ["string"],
+  "uncertainty_notes": ["string"],
+  "inference_notes": ["string"]
+}
+```
+
+The server validates every referenced ID against the authorized packet, exact quotes against stored observations, and each relationship against the stored observations or timestamps. Deterministic evidence rules assign `unknown`, `possible`, or `likely`; model confidence cannot upgrade the label. Only an explicit member action sets `confirmed`.
+
 ## Contract: MomentCandidate
 
 ```json
@@ -63,6 +94,8 @@ Phase 3 adds server-owned `analysis_version`, configured `model_version`, `sourc
   "inference_notes": ["string"]
 }
 ```
+
+MongoDB adds reconstruction model/retrieval versions, validation outcome, contradiction evidence, and an append-only review history containing actor, action, timestamp, and before/after snapshots. Member correction values are separately linked to evidence and may be undone; merge writes run transactionally.
 
 ## Contract: MomentUpdate
 

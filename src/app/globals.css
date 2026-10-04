@@ -100,6 +100,14 @@ button { font: inherit; }
 .group-moment { padding: 16px 0; border-bottom: 1px solid var(--rule); }
 .group-moment h3 { margin: 10px 0 6px; font-family: "Iowan Old Style", "Palatino Linotype", Georgia, serif; font-size: 22px; font-weight: 500; }
 .group-moment > p { font-size: 13px; line-height: 1.5; }
+.moment-review { display: grid; gap: 10px; margin-top: 14px; }
+.moment-evidence-review, .moment-merge { display: grid; grid-template-columns: 1fr 1fr; align-items: end; gap: 8px; padding-top: 10px; border-top: 1px solid var(--rule); }
+.moment-evidence-review label, .moment-merge label { display: grid; gap: 5px; color: var(--muted); font-size: 10px; }
+.moment-evidence-review select, .moment-evidence-review input, .moment-merge select { min-height: 36px; padding: 7px; border: 1px solid var(--rule); background: white; color: var(--ink); font: inherit; }
+.moment-evidence-review .text-button { justify-self: start; }
+.moment-analysis-notes { margin-top: 12px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.moment-analysis-notes p, .moment-correction { margin: 7px 0; }
+.moment-analysis-notes strong { color: var(--ink); }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 
 @media (max-width: 760px) {

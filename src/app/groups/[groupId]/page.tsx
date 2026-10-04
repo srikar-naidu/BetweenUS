@@ -4,7 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { GroupDetail, type GroupFragmentView } from "@/components/group-detail";
 import { getAuth, getAuthConfigurationStatus } from "@/lib/auth";
 import { GroupAccessError, requireGroupMembership } from "@/lib/auth/group-access";
-import { visibleMomentsForMember } from "@/lib/auth/group-visibility";
+import { momentForGroupMember, visibleMomentsForMember } from "@/lib/auth/group-visibility";
 import { getMongoDatabase } from "@/lib/db/mongodb";
 import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-repository";
 import { MongoMemoryRepository } from "@/lib/repositories/mongodb-memory-repository";
@@ -52,7 +52,7 @@ export default async function GroupPage({
     groupId,
     memberFragments.map((fragment) => fragment.id),
   );
-  const moments = visibleMomentsForMember(groupMoments, memberFragments);
+  const moments = visibleMomentsForMember(groupMoments, memberFragments).map(momentForGroupMember);
   const fragments: GroupFragmentView[] = memberFragments.map(({ storageUri: _storageUri, ...fragment }) => ({
     ...fragment,
     processingJobStatus: fragment.aiProcessingConsent ? processingStatuses.get(fragment.id) ?? null : null,

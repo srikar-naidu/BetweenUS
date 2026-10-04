@@ -7,12 +7,25 @@ export interface FragmentWorkflowInput {
   fragmentId: string;
 }
 
+export interface MomentReconstructionWorkflowInput extends FragmentWorkflowInput {
+  requesterUserId: string;
+}
+
 const runActivity = proxyActivities<typeof activities>({
   startToCloseTimeout: "1 minute",
   retry: {
     initialInterval: "1 second",
     maximumInterval: "30 seconds",
     maximumAttempts: 5,
+  },
+});
+
+const reconstructionActivity = proxyActivities<typeof activities>({
+  startToCloseTimeout: "10 minutes",
+  retry: {
+    initialInterval: "5 seconds",
+    maximumInterval: "30 seconds",
+    maximumAttempts: 2,
   },
 });
 
@@ -58,6 +71,31 @@ export async function deleteFragmentWorkflow(input: FragmentWorkflowInput): Prom
     await runActivity.markProcessingJobSucceeded({ jobId: input.jobId, outputRef: input.fragmentId });
   } catch (error) {
     await runActivity.markProcessingJobFailed({ jobId: input.jobId, errorCategory: "fragment_deletion_failed" });
+    throw error;
+  }
+}
+
+export async function reconstructMomentWorkflow(
+  input: MomentReconstructionWorkflowInput,
+): Promise<void> {
+  const workflowId = workflowInfo().workflowId;
+  try {
+    await runActivity.markProcessingJobStarted({ jobId: input.jobId, workflowId });
+    const momentId = await reconstructionActivity.reconstructMomentForFragment({
+      groupId: input.groupId,
+      fragmentId: input.fragmentId,
+      requesterUserId: input.requesterUserId,
+      momentId: input.jobId,
+    });
+    await runActivity.markProcessingJobSucceeded({
+      jobId: input.jobId,
+      outputRef: momentId,
+    });
+  } catch (error) {
+    await runActivity.markProcessingJobFailed({
+      jobId: input.jobId,
+      errorCategory: "moment_reconstruction_failed",
+    });
     throw error;
   }
 }

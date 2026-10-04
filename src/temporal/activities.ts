@@ -1,5 +1,6 @@
 import { ApplicationFailure } from "@temporalio/activity";
 import { createHash } from "node:crypto";
+import { ObjectId } from "mongodb";
 import { FRAGMENT_ANALYSIS_VERSION, generateFragmentAnalysis } from "@/lib/ai/fragment-analysis";
 import { OllamaGemmaProvider } from "@/lib/ai/gemma-provider";
 import { getMongoDatabase } from "@/lib/db/mongodb";
@@ -8,6 +9,7 @@ import { MongoIngestionRepository } from "@/lib/repositories/mongodb-ingestion-r
 import { MongoFragmentAnalysisRepository } from "@/lib/repositories/mongodb-fragment-analysis-repository";
 import { indexEligibleFragmentAnalysis } from "@/lib/retrieval/index-fragment-analysis";
 import { TigerDataFragmentSearch } from "@/lib/retrieval/tiger-data";
+import { reconstructMoment } from "@/lib/pipeline/moment-reconstruction";
 
 export async function markProcessingJobStarted(input: {
   jobId: string;
@@ -91,6 +93,39 @@ export async function analyzeTextFragment(input: {
     return null;
   }
   return analysis.id;
+}
+
+export async function reconstructMomentForFragment(input: {
+  groupId: string;
+  fragmentId: string;
+  requesterUserId: string;
+  momentId: string;
+}): Promise<string> {
+  if (!ObjectId.isValid(input.groupId) || !ObjectId.isValid(input.requesterUserId)) {
+    throw ApplicationFailure.nonRetryable("Reconstruction requester is unavailable", "RequesterUnavailable");
+  }
+  const database = await getMongoDatabase();
+  const [membership, group] = await Promise.all([
+    database.collection("group_members").findOne({
+      organizationId: new ObjectId(input.groupId),
+      userId: new ObjectId(input.requesterUserId),
+    }),
+    database.collection("groups").findOne({
+      _id: new ObjectId(input.groupId),
+      lifecycleStatus: "active",
+    }),
+  ]);
+  if (!membership || !group) {
+    throw ApplicationFailure.nonRetryable("Reconstruction requester is no longer a group member", "MembershipUnavailable");
+  }
+  const result = await reconstructMoment({
+    database,
+    groupId: input.groupId,
+    anchorFragmentId: input.fragmentId,
+    viewerUserId: input.requesterUserId,
+    momentId: input.momentId,
+  });
+  return result.moment.id;
 }
 
 export async function markProcessingJobSucceeded(input: {

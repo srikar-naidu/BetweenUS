@@ -8,7 +8,7 @@ export interface ProcessingJob {
   id: string;
   groupId: string;
   fragmentId: string;
-  jobType: "ingest" | "delete_fragment";
+  jobType: "ingest" | "delete_fragment" | "reconstruct_moment";
   processingVersion: string;
   status: ProcessingJobStatus;
   attemptCount: number;
@@ -166,6 +166,7 @@ export class MongoIngestionRepository {
     const records = await this.processingJobs.find({
       groupId,
       fragmentId: { $in: [...fragmentIds] },
+      jobType: "ingest",
     }).sort({ updatedAt: -1 }).toArray();
     const statuses = new Map<string, ProcessingJobStatus>();
     for (const record of records) {

@@ -1,4 +1,12 @@
-import type { Fragment, Moment } from "@/lib/domain/memory";
+import type { Fragment, MemberMoment, Moment } from "@/lib/domain/memory";
+
+export function momentForGroupMember(moment: Moment): MemberMoment {
+  const { reviewHistory, ...visibleMoment } = moment;
+  return {
+    ...visibleMoment,
+    canUndoCorrection: reviewHistory?.at(-1)?.action === "correct",
+  };
+}
 
 export function visibleMomentsForMember(
   moments: readonly Moment[],

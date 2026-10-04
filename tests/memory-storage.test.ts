@@ -342,6 +342,67 @@ test("fragment creation retries with the same scoped ID return the original reco
   await assert.rejects(repository.createFragment({ ...input, groupId: "group-b" }));
 });
 
+test("idempotent Moment persistence preserves a result already changed by member review", async () => {
+  let update: Record<string, unknown> | undefined;
+  const reviewedMoment = {
+    _id: "moment-job-id",
+    groupId: "group-a",
+    title: null,
+    summary: "Reviewed by a member.",
+    confidence: 0.4,
+    uncertaintyLabel: "confirmed",
+    uncertaintyReason: "A group member explicitly confirmed this moment.",
+    startAt: new Date("2026-10-04T12:00:00Z"),
+    endAt: new Date("2026-10-04T12:05:00Z"),
+    status: "confirmed",
+    evidence: [],
+    reviewHistory: [{ actorUserId: "private-user", action: "confirm" }],
+    corrections: [],
+    revision: 1,
+    mergedIntoMomentId: null,
+    createdAt: new Date("2026-10-04T12:00:00Z"),
+    updatedAt: new Date("2026-10-04T12:06:00Z"),
+  };
+  const repository = new MongoMemoryRepository({
+    collection: () => ({
+      updateOne: async (
+        _filter: Record<string, unknown>,
+        document: Record<string, unknown>,
+        options: Record<string, unknown>,
+      ) => {
+        update = document;
+        assert.equal(options.upsert, true);
+      },
+      findOne: async (filter: Record<string, unknown>) => {
+        assert.equal(filter._id, "moment-job-id");
+        assert.equal(filter.groupId, "group-a");
+        return reviewedMoment;
+      },
+    }),
+  } as unknown as Db);
+
+  const result = await repository.insertMomentIfAbsent({
+    id: "moment-job-id",
+    groupId: "group-a",
+    title: null,
+    summary: "Original proposal.",
+    confidence: 0.7,
+    uncertaintyLabel: "possible",
+    uncertaintyReason: "Review needed.",
+    startAt: new Date("2026-10-04T12:00:00Z"),
+    endAt: new Date("2026-10-04T12:05:00Z"),
+    status: "candidate",
+    evidence: [],
+    createdAt: new Date("2026-10-04T12:00:00Z"),
+    updatedAt: new Date("2026-10-04T12:00:00Z"),
+  });
+
+  assert.ok(update && "$setOnInsert" in update);
+  assert.equal(result.summary, "Reviewed by a member.");
+  assert.equal(result.status, "confirmed");
+  assert.equal(result.reviewHistory?.length, 1);
+});
+
 test("group deletion marks the group pending and creates a cleanup request", async () => {
   const updates: Array<{ collection: string; filter: Record<string, unknown>; update: Record<string, unknown> }> = [];
   const multiUpdates: Array<{ collection: string; filter: Record<string, unknown>; update: Record<string, unknown> }> = [];

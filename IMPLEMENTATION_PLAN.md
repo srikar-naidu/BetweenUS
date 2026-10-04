@@ -157,6 +157,8 @@ The project can continue on local Gemma and synthetic demo data while these acco
 
 ### Phase 4: Moment reconstruction, evidence, and correction
 
+**Current implementation status:** The group page queues text-only reconstruction as an idempotent Temporal workflow from an eligible group-visible fragment. The worker rechecks active group membership, fetches an authorized bounded ContextPacket, and asks Gemma for a schema-constrained proposal; the server validates candidate IDs, quote provenance, and evidence relationships, then assigns uncertainty deterministically and persists provenance. The UI polls the job and presents its result. Members can confirm, reject, merge, correct or undo the latest correction, and remove evidence. Review events retain before/after snapshots; review writes use revision checks and candidate merges use a MongoDB transaction.
+
 - Ask Gemma for schema-constrained candidate summaries, evidence links, contradictions, missing evidence, and uncertainty notes.
 - Validate IDs and permissions against MongoDB, not just model output. Validate relationship types using stored observations; reject unsupported links.
 - Derive `unknown`, `possible`, or `likely` with documented deterministic evidence rules. A model score never upgrades a label. `confirmed` is only a member action.
@@ -164,7 +166,7 @@ The project can continue on local Gemma and synthetic demo data while these acco
 - Implement the member review flow: confirm, reject/merge, correct a person/place/reference, and remove a fragment from a moment.
 - Reflect a confirmed correction into Backboard only after authorization and explicit confirmation. Keep its memory ID and Mongo provenance for update/delete.
 
-**Exit gate:** no unsupported evidence can be persisted; insufficient evidence returns unknown; corrections are durable and reversible/auditable.
+**Exit gate:** unit tests cover unsupported evidence rejection, insufficient-evidence `unknown`, deterministic uncertainty, audit snapshots, undo, and transaction-scoped merge writes. Live Gemma/database behavior remains unverified in this environment. MongoDB merges require a deployment topology that supports transactions. Backboard correction sync is deferred to Phase 5 and remains disabled.
 
 ### Phase 5: Backboard group memory integration
 

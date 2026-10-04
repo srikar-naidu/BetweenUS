@@ -60,11 +60,55 @@ test("processing job upserts are stable and scoped to group, fragment, and versi
   const retry = await repository.upsertProcessingJob(input);
   const otherGroup = await repository.upsertProcessingJob({ ...input, groupId: "group-b" });
   const nextVersion = await repository.upsertProcessingJob({ ...input, processingVersion: "ingest-v2" });
+  const reconstruction = await repository.upsertProcessingJob({
+    ...input,
+    jobType: "reconstruct_moment",
+    processingVersion: "moment-reconstruction-v1-request-a",
+  });
 
   assert.equal(first.id, retry.id);
   assert.notEqual(first.id, otherGroup.id);
   assert.notEqual(first.id, nextVersion.id);
-  assert.equal(documents.length, 3);
+  assert.notEqual(reconstruction.id, first.id);
+  assert.equal(reconstruction.jobType, "reconstruct_moment");
+  assert.equal(documents.length, 4);
+});
+
+test("fragment processing status excludes separate moment reconstruction jobs", async () => {
+  let query: Record<string, unknown> | undefined;
+  const repository = new MongoIngestionRepository({
+    collection: () => ({
+      createIndex: async () => "index",
+      find: (filter: Record<string, unknown>) => {
+        query = filter;
+        return {
+          sort: () => ({
+            toArray: async () => [
+              {
+                groupId: "group-a",
+                fragmentId: "fragment-a",
+                jobType: "reconstruct_moment",
+                status: "running",
+                updatedAt: new Date("2026-10-04T12:02:00Z"),
+              },
+              {
+                groupId: "group-a",
+                fragmentId: "fragment-a",
+                jobType: "ingest",
+                status: "succeeded",
+                updatedAt: new Date("2026-10-04T12:01:00Z"),
+              },
+            ].filter((record) => record.jobType === filter.jobType),
+          }),
+        };
+      },
+    }),
+  } as never);
+
+  const statuses = await repository.latestProcessingStatusByFragmentIds("group-a", ["fragment-a"]);
+
+  assert.equal(query?.jobType, "ingest");
+  assert.equal(statuses.get("fragment-a"), "succeeded");
 });
 
 test("failed ingestion and deletion jobs can only reset to queued for their original job type", async () => {

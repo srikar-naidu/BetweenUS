@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { groupSummaryForMember, membershipAllows } from "../src/lib/auth/group-access";
-import { visibleMomentsForMember } from "../src/lib/auth/group-visibility";
+import { momentForGroupMember, visibleMomentsForMember } from "../src/lib/auth/group-visibility";
 import type { Fragment, Moment } from "../src/lib/domain/memory";
 
 const member = {
@@ -70,6 +70,56 @@ test("moment evidence cannot cross group, visibility, consent, or deletion bound
     evidence: evidenceIds.map((fragmentId) => ({ fragmentId, relationship: "temporal" })),
     createdAt: new Date("2026-09-04T12:10:00Z"),
     updatedAt: new Date("2026-09-04T12:10:00Z"),
+  });
+
+  test("member-facing moment views omit internal actor IDs but expose correction undo state", () => {
+    const reviewed: Moment = {
+      id: "moment-review",
+      groupId: "group-a",
+      title: null,
+      summary: "A possible moment.",
+      confidence: 0.5,
+      uncertaintyLabel: "possible",
+      uncertaintyReason: "Needs review.",
+      startAt: new Date("2026-09-04T12:00:00Z"),
+      endAt: new Date("2026-09-04T12:05:00Z"),
+      status: "candidate",
+      evidence: [],
+      reviewHistory: [{
+        id: "review-event",
+        actorUserId: "private-user-id",
+        action: "correct",
+        occurredAt: new Date("2026-09-04T12:10:00Z"),
+        before: {
+          title: null,
+          summary: "A possible moment.",
+          status: "candidate",
+          uncertaintyLabel: "possible",
+          uncertaintyReason: "Needs review.",
+          evidence: [],
+          corrections: [],
+          mergedIntoMomentId: null,
+        },
+        after: {
+          title: null,
+          summary: "A possible moment.",
+          status: "candidate",
+          uncertaintyLabel: "possible",
+          uncertaintyReason: "Needs review.",
+          evidence: [],
+          corrections: [{ type: "place", fragmentId: "fragment-a", value: "North cafeteria" }],
+          mergedIntoMomentId: null,
+        },
+      }],
+      corrections: [{ type: "place", fragmentId: "fragment-a", value: "North cafeteria" }],
+      createdAt: new Date("2026-09-04T12:00:00Z"),
+      updatedAt: new Date("2026-09-04T12:10:00Z"),
+    };
+
+    const view = momentForGroupMember(reviewed);
+    assert.equal(view.canUndoCorrection, true);
+    assert.equal("reviewHistory" in view, false);
+    assert.equal(JSON.stringify(view).includes("private-user-id"), false);
   });
   const fragment = (
     id: string,
