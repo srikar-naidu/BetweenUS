@@ -19,7 +19,7 @@ export function GoogleSignInButton({
       try {
         const result = await authClient.signIn.social({
           provider: "google",
-          callbackURL: `${window.location.origin}${callbackURL}`,
+          callbackURL,
         });
         if (result.error) setError("Google sign-in could not be started. Try again.");
       } catch {

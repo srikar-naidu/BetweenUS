@@ -145,6 +145,7 @@ async function createAuth() {
     appName: "Between Us",
     baseURL: process.env.BETTER_AUTH_URL,
     secret: process.env.BETTER_AUTH_SECRET,
+    trustedOrigins: [new URL(process.env.BETTER_AUTH_URL!).origin],
     database: mongodbAdapter(database, { client, usePlural: true }),
     socialProviders: {
       google: {
